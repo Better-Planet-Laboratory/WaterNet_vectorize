@@ -1,0 +1,10 @@
+/.eggs
+/data
+/.idea
+/src/wwvec.egg-info
+/configuration_files/path_config.yaml
+*__pycache__*
+*.c
+*.so
+*.html
+/build
