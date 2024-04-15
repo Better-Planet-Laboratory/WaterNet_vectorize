@@ -60,6 +60,7 @@ class BasinData:
     ):
         # Buffer the bounding box a tiny amount so no points land exactly on the boundary
         self.bbox_buffer = bbox_buffer
+        """Buffer distance for the bounding box of the basin."""
         self.paths = paths
         self.basin_geometry = basin_geometry
         self.stream_geometry = stream_geometry

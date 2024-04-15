@@ -8,3 +8,4 @@
 *.so
 *.html
 /build
+/documentation_html

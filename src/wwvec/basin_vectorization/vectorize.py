@@ -7,7 +7,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 class Vectorizer:
-
     def __init__(self, thin_grid, waterways_data, bbox, x_res, y_res, plot_data=False):
         self.bounds = bbox
         self.x_res, self.y_res = x_res, y_res
