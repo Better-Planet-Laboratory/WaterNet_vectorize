@@ -64,7 +64,6 @@ def make_all_intersecting_polygon(
             except:
                 print(f'issue with {hydro2_id}, {stream_id}')
                 continue
-
     np.random.shuffle(inputs_list)
     input_chunks = np.array_split(inputs_list, max(len(inputs_list)//500, 4*num_proc))
     time_elapsed(s, 2)
@@ -74,11 +73,6 @@ def make_all_intersecting_polygon(
         use_kwargs=False, sleep_time=0, terminate_on_error=False
     )
     print('Merging dataframes')
-    # count = 0
-    # for chunk in input_chunks:
-    #     count += len(chunk)
-    # print(len(inputs_list), count)
-    # merged_df = merge_dfs(input_list=inputs_list)
     merged_df = pd.concat([gpd.read_parquet(file) for file in temp_basin_path.iterdir()], ignore_index=True)
     merged_df.to_parquet(save_path)
 

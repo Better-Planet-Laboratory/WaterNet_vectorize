@@ -21,7 +21,6 @@ class CycleRemover:
 
     def add_edges_to_graph(self):
         edges = []
-        # weight_lambda = lambda x: np.exp(x) if x < 0 else 1 + x if x < 20 else 1000
         weight_lambda = lambda x: 0 if x < 0 else x if x < 20 else 1000
 
         for waterway in self.waterways:

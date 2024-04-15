@@ -7,6 +7,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 class Vectorizer:
+
     def __init__(self, thin_grid, waterways_data, bbox, x_res, y_res, plot_data=False):
         self.bounds = bbox
         self.x_res, self.y_res = x_res, y_res
@@ -23,6 +24,7 @@ class Vectorizer:
             [(-1, 0), (0, 1), (-1, 1)],
             [(-1, 0), (0, -1), (-1, -1)]
         ]
+
         self.thin_grid[thin_grid == 2] = 0
         self.clean_embed = self.embed_in_larger(grid=self.thin_grid, side_increase=1)
         # thin_grid[*rows_cols_remove] = 1
