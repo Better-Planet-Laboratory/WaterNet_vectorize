@@ -7,7 +7,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from functools import cached_property
 from wwvec.basin_vectorization.basin_class import BasinData
-from collections import defaultdict
+
 sys.setrecursionlimit(100000000)
 
 class Vectorizer:
@@ -18,14 +18,16 @@ class Vectorizer:
         self.x_res, self.y_res = np.abs(basin_data.basin_probability.rio.resolution())
         self.reference_waterway_data = reference_waterway_data
         self.thin_grid = thin_grid.copy()
-        # self.connecting_dict = self.get_connecting_lines()
+        self.connecting_dict, self.connecting_rows_cols = self.get_connecting_lines()
         self.line_strings = []
-        self.intersection_points = []
-        self.connections_seen = defaultdict(set)
+        self.seen = {}
         self.thin_grid[thin_grid == 2] = 0
         self.clean_embed = self.embed_in_larger(grid=self.thin_grid, side_increase=1)
         self.count_grid = self.make_count_8_grid(self.clean_embed)
+        self.connecting_rows_cols += 1
         self.init_count_copy = self.count_grid.copy()
+        if len(self.connecting_rows_cols) > 0:
+            self.connecting_rows_cols = set([(r, c) for (r, c) in self.connecting_rows_cols])
         self.init_count_grid = self.count_grid.copy()
         self.make_all_simple_linestrings()
         self.make_shapely_line_strings()
@@ -43,37 +45,31 @@ class Vectorizer:
         reference_waterway_points = np.array(points)
         return reference_waterway_points
 
-    def add_to_connections_seen(self, node1, node2):
-        self.connections_seen[node1].add(node2)
-        self.connections_seen[node2].add(node1)
-
-    @cached_property
-    def connecting_points_coordinates(self) -> set:
+    def get_connecting_lines(self) -> (dict, list[int, int]):
         rows, cols = np.where(self.thin_grid == 1)
         connecting_row_cols = []
-        connecting_points = set()
-        rows_cols = zip(rows, cols)
+        connecting_dict = {}
+        rows_cols = list(zip(rows, cols))
         for (row, col) in rows_cols:
             if np.any(self.thin_grid[row-1:row+2, col-1:col+2] == 2):
                 connecting_row_cols.append((row, col))
         connecting_row_cols = np.array(connecting_row_cols)
         if len(connecting_row_cols) > 0:
             coords = self.row_col_array_to_midpoint_coordinates(connecting_row_cols)
-            connecting_points.update([(x, y) for (x, y) in coords])
-            # connecting_points = shapely.points(coords)
-            # tree = shapely.STRtree(self.reference_waterway_points)
-            # nearest_points = tree.query_nearest(geometry=connecting_points)
-            # for i, j in zip(*nearest_points):
-            #     connecting_dict[tuple(coords[i])] = {
-            #         'line': shapely.LineString([connecting_points[i], self.reference_waterway_points[j]]),
-            #         'point': self.reference_waterway_points[j].coords[0]
-            #     }
-        return connecting_points
+            connecting_points = shapely.points(coords)
+            tree = shapely.STRtree(self.reference_waterway_points)
+            nearest_points = tree.query_nearest(geometry=connecting_points)
+            for i, j in zip(*nearest_points):
+                connecting_dict[tuple(coords[i])] = {
+                    'line': shapely.LineString([connecting_points[i], self.reference_waterway_points[j]]),
+                    'point': self.reference_waterway_points[j].coords[0]
+                }
+        return connecting_dict, connecting_row_cols
 
 
     def connect_to_base_waterways(self) -> None:
         new_linestrings = []
-        connecting_points_coordinates_list = []
+        intersection_points = []
         for line_string in self.line_strings:
             to_add = [line_string]
             coords_list = line_string.coords
@@ -83,15 +79,15 @@ class Vectorizer:
                 to_add = []
             elif head_coords in self.connecting_dict:
                 to_add.append(self.connecting_dict[head_coords]['line'])
-                self.intersection_points.append(self.connecting_dict[head_coords]['point'])
+                intersection_points.append(self.connecting_dict[head_coords]['point'])
             elif tail_coords in self.connecting_dict:
                 to_add.append(self.connecting_dict[tail_coords]['line'])
-                self.intersection_points.append(self.connecting_dict[tail_coords]['point'])
+                intersection_points.append(self.connecting_dict[tail_coords]['point'])
             else:
                 for coords in coords_list:
                     if coords in self.connecting_dict:
                         to_add.append(self.connecting_dict[coords]['line'])
-                        self.intersection_points.append(self.connecting_dict[coords]['point'])
+                        intersection_points.append(self.connecting_dict[coords]['point'])
                         break
             if len(to_add) > 0:
                 to_add_geom = shapely.unary_union(to_add)
@@ -110,6 +106,7 @@ class Vectorizer:
             crs=4326)
         self.line_strings = pd.concat([old_data, self.line_strings], ignore_index=True)
         self.line_strings['from_tdx'] = self.line_strings['from_tdx'].astype(bool)
+        self.intersection_points = intersection_points
 
 
     def embed_in_larger(self, grid: np.ndarray, side_increase: int) -> np.ndarray:
@@ -137,15 +134,54 @@ class Vectorizer:
         self.make_all_linestrings_starting_at_2()
         while np.any(self.count_grid == 1):
             self.make_all_linestrings_starting_at_1()
-        self.add_remaining()
+        self.add_odd_shaped()
+        self.make_all_linestrings_starting_at_1(True)
+        self.make_all_linestrings_starting_at_2(True)
 
-    def add_remaining(self) -> None:
-        while np.any(self.count_grid>0):
-            rows, cols = np.where(self.count_grid >= 1)
-            for row, col in zip(rows, cols):
-                line_string_list = [(row, col)]
-                self.line_strings.append(line_string_list)
-                self.investigate_row_col(row, col, line_string_list, True)
+    def add_odd_shaped(self) -> None:
+        # Along with the original (row, col), shifting (row, col) by each pair in the list will make a square,
+        # and shifting by the first two pairs in the list will make a rotation of an L.
+        square_shaped = [
+            [(1, 0), (0, 1), (1, 1)], [(1, 0), (0, -1), (1, -1)],
+            [(-1, 0), (0, 1), (-1, 1)], [(-1, 0), (0, -1), (-1, -1)]
+        ]
+        rows, cols = np.where(self.count_grid >= 2)
+        for row, col in zip(rows, cols):
+            others_seen = set()
+            for square_shape in square_shaped:
+                orow1, ocol1 = row + square_shape[0][0], col + square_shape[0][1]
+                orow2, ocol2 = row + square_shape[1][0], col + square_shape[1][1]
+                orow3, ocol3 = row + square_shape[2][0], col + square_shape[2][1]
+                row_corner, col_corner = row + square_shape[2][0]/2, col + square_shape[2][1]/2
+                # If each pair (row, col), (orowi, ocoli) equal 1, then we have a square shape.
+                # In this case, we connect the midpoint of each cell to the midpoint of the square,
+                # rather than connecting the cell midpoings together directly.
+                if (self.clean_embed[row, col] == self.clean_embed[orow1, ocol1]
+                        == self.clean_embed[orow2, ocol2] == self.clean_embed[orow3, ocol3]):
+                    self.line_strings.append([(row, col), (row_corner, col_corner)])
+                    self.line_strings.append([(orow1, ocol1), (row_corner, col_corner)])
+                    self.line_strings.append([(orow2, ocol2), (row_corner, col_corner)])
+                    self.line_strings.append([(orow3, ocol3), (row_corner, col_corner)])
+                    self.count_grid[row, col] = max(self.count_grid[row, col] - 3, 0)
+                    self.count_grid[orow1, ocol1] = max(self.count_grid[orow1, ocol1] - 3, 0)
+                    self.count_grid[orow2, ocol2] = max(self.count_grid[orow2, ocol2] - 3, 0)
+                    self.count_grid[orow3, ocol3] = max(self.count_grid[orow3, ocol3] - 3, 0)
+                # In this case we have an L shape, so we connect each of (orow1, ocol1) and (orow2, ocol2) to
+                # (row, col), but we don't connect (orow1, ocol1) to (orow2, ocol2).
+                elif (self.count_grid[row, col] > 0
+                      and self.count_grid[orow1, ocol1] > 0
+                      and self.count_grid[orow2, ocol2] > 0):
+                    others = [(orow1, ocol1), (orow2, ocol2)]
+                    self.line_strings.append([(orow1, ocol1), (row, col), (orow2, ocol2)])
+                    not_in_seen = [others for others in others if others not in others_seen]
+                    other_new_val = lambda r, c: self.count_grid[r, c] - 2 if (r, c) not in others_seen\
+                        else self.count_grid[r, c] - 1
+                    self.count_grid[row, col] = max(self.count_grid[row, col] - len(not_in_seen), 0)
+                    self.count_grid[orow1, ocol1] = max(other_new_val(orow1, ocol1), 0)
+                    self.count_grid[orow2, ocol2] = max(other_new_val(orow2, ocol2), 0)
+                    others_seen.update(others)
+    def update_square_shaped(self):
+        pass
 
     def make_all_linestrings_starting_at_1(self, investigate_all: bool=False) -> None:
         rows, cols = np.where(self.count_grid == 1)
@@ -175,25 +211,23 @@ class Vectorizer:
     ) -> None:
         self.count_grid[row, col] -= 1
         row2, col2 = None, None
+        # 114,81
         for i, j in [(1, 0), (-1, 0), (0, 1), (0, -1),
                      (1, 1), (-1, 1), (1, -1), (-1, -1)]:
             row1, col1 = row + i, col + j
-            if self.count_grid[row1, col1] > 0:
-                if (row1, col1) not in self.connections_seen[(row, col)]:
-                    self.add_to_connections_seen((row, col), (row1, col1))
+            if len(line_string_list) > 1:
+                row2, col2 = line_string_list[-2]
+            if row1 != row2 or col1 != col2:
+                if self.count_grid[row1, col1] > 0:
                     self.count_grid[row1, col1] -= 1
-                    if self.init_count_grid[row1, col1] == 1 and not investigate_all:
+                    if self.init_count_grid[row1, col1] == 1:
                         line_string_list.append((row1, col1))
-                    elif self.init_count_grid[row1, col1] == 2 and not investigate_all:
+                    elif self.init_count_grid[row1, col1] == 2 or (investigate_all and self.count_grid[row1, col1]>0):
                         line_string_list.append((row1, col1))
                         self.investigate_row_col(row1, col1, line_string_list, investigate_all)
                     else:
                         line_string_list.append((row1, col1))
-                    break
-        else:
-            line_string_list.pop()
-            # raise Exception('Line string not found')
-
+                    return
 
     def row_col_array_to_midpoint_coordinates(self, row_col_array):
         x_resolution = self.x_res

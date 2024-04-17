@@ -1,3 +1,5 @@
+from functools import cached_property
+
 from wwvec.paths import BasinPaths
 import shapely
 from wwvec.basin_vectorization.cut_bbox_raster import make_bbox_raster
@@ -18,22 +20,27 @@ class BasinData:
     Methods:
     - __init__(self, basin_geometry: shapely.Polygon, stream_geometry: shapely.LineString,
      paths: BasinPaths, bbox_buffer: float=0.005, **kwargs):
-      Initializes the BasinData instance with the given parameters and performs the necessary data operations.
+        Initializes the BasinData instance with the given parameters and performs the necessary data operations.
     - cut_basin_data(self, stream_buffer=.0001, **kwargs) -> (xr.DataArray, xr.DataArray, np.ndarray, np.ndarray):
-     Cuts and merges the model waterway probability and elevation data for the basin, and returns the resulting arrays.
+        Cuts and merges the model waterway probability and elevation data for the basin,
+         and returns the resulting arrays.
     - make_rounded_grid(self, round_value=.5, **kwargs) -> np.ndarray:
-     Creates a rounded version of the probability grid based on the given round_value threshold.
-    - make_probability_grid(self) -> np.ndarray:
-     Creates a numpy array copy of the basin_probability xarray.DataArray and sets
-      the tdx-waterways to have a probability of 1 based on the burned waterway raster.
+        Creates a rounded version of the probability grid based on the given round_value threshold.
+    - probability_grid(self) -> np.ndarray:
+        Treated as an instance variable. Creates a numpy array copy of the basin_probability xarray.DataArray and sets
+         the tdx-waterways to have a probability of 1 based on the burned waterway raster.
+    - connected_grid(self) -> np.ndarray:
+        Treated as an instance variable. Creates a copy of the rounded_grid,
+         which will be the mutable grid used to connect the disconnected waterways.
     - find_main_component(self) -> int:
-     Finds the main component of the tdx-waterways and sets all tdx-waterways to have the same component.
+        Finds the main component of the tdx-waterways and sets all tdx-waterways to have the same component.
     - find_component_min_elevation_points(self) -> Set[(int, int)]:
-     Finds the minimum elevation points for each component and returns them as a set of (row, col) tuples.
+        Finds the minimum elevation points for each component and returns them as a set of (row, col) tuples.
     - remove_waterways_out_of_basin(self):
-     Removes waterways that are outside of the basin based on the component grid and basin grid.
+        Removes waterways that are outside of the basin based on the component grid and basin grid.
     - make_weight_grid(self, min_val: float = .1, max_val: float = .5, **kwargs):
-     rescales the probability grid using the min_val and max_val inputs, then applies -np.log2 to the positive values.
+        rescales the probability grid using the min_val and max_val inputs,
+         then applies -np.log2 to the positive values.
 
     Instance Variables:
     - bbox_buffer: Buffer distance for the bounding box of the basin.
@@ -51,6 +58,7 @@ class BasinData:
     - component_grid: numpy.ndarray representing the component grid.
     - main_component: Integer value representing the main component of the tdx-waterways.
     - weight_grid: The cells are given a weight based on how strongly the model thinks they are water.
+    - min_value: The minimum acceptable waterway value for the cell to be considered as a node in the connection process
     """
     def __init__(
             self, basin_geometry: shapely.Polygon,
@@ -69,7 +77,6 @@ class BasinData:
         self.basin_probability, self.basin_elevation, self.basin_grid, self.waterway_grid\
             = self.cut_basin_data(**kwargs)
         self.elevation_grid = self.basin_elevation[0].to_numpy().astype(np.int16)
-        self.probability_grid = self.make_probability_grid()
         self.rounded_grid = self.make_rounded_grid(**kwargs)
         self.component_grid, *_ = find_raster_components(self.rounded_grid, self.elevation_grid)
         self.main_component = self.find_main_component()
@@ -147,7 +154,8 @@ class BasinData:
         self.rounded_grid = self.rounded_grid.astype(np.int8)
         return self.rounded_grid
 
-    def make_probability_grid(self) -> np.ndarray:
+    @cached_property
+    def probability_grid(self) -> np.ndarray:
         """
         Makes a numpy array copy of the basin_probability xarray.DataArray, and then sets the tdx-waterways to have
         a probability of 1, where the locations of the tdx-waterways are taken from the burned waterway raster.
@@ -156,9 +164,22 @@ class BasinData:
             numpy.ndarray: The generated probability grid.
 
         """
-        self.probability_grid = self.basin_probability.to_numpy()[0]
-        self.probability_grid[self.waterway_grid == 1] = 1
-        return self.probability_grid
+        probability_grid = self.basin_probability.to_numpy()[0]
+        probability_grid[self.waterway_grid == 1] = 1
+        return probability_grid
+
+    @cached_property
+    def connected_grid(self) -> np.ndarray:
+        """
+        Creates a copy of the rounded_grid, which will be the mutable grid used to connect the disconnected waterways.
+
+        Returns:
+            np.ndarray: the connected grid.
+        """
+        new_grid = self.rounded_grid.copy()
+        new_grid[new_grid > 0] = 1
+        new_grid = new_grid.astype(np.int8)
+        return new_grid
 
     def find_main_component(self) -> int:
         """
@@ -232,7 +253,7 @@ class BasinData:
         self.probability_grid[to_change] = 0
         self.component_grid[self.component_grid < 0] = 0
 
-    def make_weight_grid(self, min_val: float=.1, max_val: float=.5):
+    def make_weight_grid(self, min_val: float=.1, max_val: float=.5, **kwargs):
         """
         The weight grid will be used to make graph weights.
         We want anything the model mostly thinks as water to have a value of 1 (which will have a small weight),
@@ -250,6 +271,7 @@ class BasinData:
         **kwargs
             Additional keyword arguments if necessary.
         """
+        self.min_val = min_val
         self.weight_grid = self.probability_grid.copy()
         self.weight_grid = (self.weight_grid - min_val) / (max_val - min_val)
         self.weight_grid[self.weight_grid > 1] = 1
