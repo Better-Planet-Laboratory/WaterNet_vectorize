@@ -1,7 +1,7 @@
 import rioxarray as rxr
 from rioxarray.merge import merge_arrays
 import xarray as xr
-from water.basic_functions import ppaths, Path
+from pathlib import Path
 from water.make_country_waterways.cut_data import make_directory_gdf
 import shapely
 import numpy as np

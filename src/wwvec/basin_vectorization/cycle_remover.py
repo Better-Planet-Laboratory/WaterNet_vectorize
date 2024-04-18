@@ -1,7 +1,5 @@
 import numpy as np
 import shapely
-
-from water.basic_functions import Path
 import rioxarray as rxr
 import xarray as xr
 import networkx as nx

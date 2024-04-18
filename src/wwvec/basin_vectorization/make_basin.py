@@ -1,24 +1,20 @@
 import shapely
-from water.basic_functions import my_pool
 from wwvec.basin_vectorization.basin_class import BasinData, post_connections_clean
 from wwvec.basin_vectorization.connect import Connector
 from wwvec.basin_vectorization.cycle_remover import CycleRemover
 from wwvec.basin_vectorization.vectorize import Vectorizer
+from wwvec.basin_vectorization.local_stream_order import NodeGenerator, StreamGenerator
 from wwvec.paths import BasinPaths
 import numpy as np
-import matplotlib.pyplot as plt
 import geopandas as gpd
 import pandas as pd
 import os
-from wwvec.basin_vectorization.local_stream_order import NodeGenerator, StreamGenerator
-
-import time
 from typing import Union
 PolygonType = Union[shapely.Polygon, shapely.MultiPolygon]
 LineStringType = Union[shapely.LineString, shapely.MultiLineString]
 
 
-def connect_disconnected_components(basin_data: BasinData, **kwargs):
+def connect_disconnected_components(basin_data: BasinData, **kwargs) -> np.ndarray:
     """
     Connects disconnected components in the input basin_data.
 
@@ -41,30 +37,29 @@ def connect_disconnected_components(basin_data: BasinData, **kwargs):
         connected_grid[np.where(np.isin(connector.component_grid, unseen_components))] = 0
         for node in targets:
             path, index = paths.get(node, {'path': [], 'i': 0}).values()
-            for (row, col) in path:
-                if connected_grid[row, col] == 0:
-                    connected_grid[row, col] = index
-                connected_grid[node] = 10
-        connected_grid[connected_grid > 2] = 1
+            if len(path) > 0:
+                path = np.array(path)
+                connected_grid[path[:, 0], path[:, 1]] = 1
     connected_grid[basin_data.waterway_grid == 1] = 2
     return connected_grid
 
 
-def remove_cycles_and_make_gdfs(vectorizer: Vectorizer, basin_data: BasinData):
+def remove_cycles_and_make_gdfs(
+        vectorizer: Vectorizer, basin_data: BasinData
+) -> gpd.GeoDataFrame:
     """
     Parameters
     ----------
     vectorizer : Vectorizer
-        The vectorizer object that generates the line strings representing waterways.
+        Object that contains information about the waterway network.
 
     basin_data : BasinData
-        The basin data object that contains the basin data.
+        Object that contains information about the basin data.
 
     Returns
     -------
-    tuple
-        A tuple containing two objects - the new waterways GeoDataFrame without cycles,
-         and the initial waterways GeoDataFrame before removing cycles.
+    gpd.GeoDataFrame
+        GeoDataFrame containing the waterways with cycles removed.
 
     """
     init_new_waterways = vectorizer.line_strings
@@ -82,69 +77,69 @@ def remove_cycles_and_make_gdfs(vectorizer: Vectorizer, basin_data: BasinData):
             crs=4326
         )
         new_waterways = pd.concat([base_gdf, new_waterways], ignore_index=True)
-    return new_waterways, init_new_waterways
+    return new_waterways
 
 
 def run_for_basin(
         basin_geometry: PolygonType, stream_geometry: LineStringType,
-        hydro2_id: int, stream_id: int, overwrite=False, **kwargs
-):
+        old_target_id: int, old_source_ids: list[int],
+        hydro2_id: int, stream_id: int, old_stream_order: int, overwrite=False, **kwargs
+) -> gpd.GeoDataFrame:
     """
     Parameters
     ----------
     basin_geometry : PolygonType
-        The geometry of the basin.
+        The geometry representing the basin.
     stream_geometry : LineStringType
-        The geometry of the stream.
+        The geometry representing the stream.
+    old_target_id : int
+        The tdx target stream id.
+    old_source_ids : list[int]
+        The tdx ids for the source streams.
     hydro2_id : int
-        The hydro2 ID of the basin.
+        The hydro2 id for the basin.
     stream_id : int
-        The ID of the stream.
+        The stream id for the basin.
+    old_stream_order : int
+        The stream order for the old stream.
     overwrite : bool, optional
-        Whether to overwrite the existing saved data for the basin. Default is False.
-    kwargs : keyword arguments, optional
-        Additional arguments that can be passed to the method.
+        Indicates whether to overwrite the existing data in the save path. The default is False.
+    **kwargs
+        Additional keyword arguments.
 
     Returns
     -------
-    new_waterways : GeoDataFrame
-        The new waterways intersecting the basin geometry.
-    init_new_waterways : GeoDataFrame
-        The initial new waterways before intersection with the basin geometry.
+    gpd.GeoDataFrame
+        The GeoDataFrame containing the generated stream data for the basin.
+
     """
     basin_paths = BasinPaths(stream_id=stream_id, hydro2_id=hydro2_id)
     if basin_paths.save_path.exists() and not overwrite:
-        return gpd.GeoDataFrame(), gpd.GeoDataFrame()
+        return gpd.GeoDataFrame()
     elif basin_paths.save_path.exists() and overwrite:
         os.remove(basin_paths.save_path)
-    s = tt()
-    print('basin data')
     basin_data = BasinData(
         basin_geometry=basin_geometry, stream_geometry=stream_geometry, paths=basin_paths, **kwargs
     )
-    time_elapsed(s, 2)
-    print('connect')
-    s = tt()
     connected_grid = connect_disconnected_components(basin_data)
-    time_elapsed(s, 2)
-    s = tt()
-    print('thin')
     thin_grid = post_connections_clean(
         connected_grid, elevation_grid=basin_data.elevation_grid, waterway_grid=basin_data.waterway_grid
     )
-    time_elapsed(s, 2)
-    print('vectorize')
-    s = tt()
     waterway_line_strings = [stream_geometry] if not hasattr(stream_geometry, 'geoms') else list(stream_geometry.geoms)
     vectorizer = Vectorizer(thin_grid, waterway_line_strings, basin_data)
-    new_waterways, init_new_waterways = remove_cycles_and_make_gdfs(vectorizer, basin_data)
-    time_elapsed(s, 2)
-    new_waterways['stream_id'] = stream_id
-    # new_waterways.to_parquet(basin_paths.save_path)
-    return new_waterways, init_new_waterways
+    new_waterways = remove_cycles_and_make_gdfs(vectorizer, basin_data)
+    node_generator = NodeGenerator(
+        new_line_strings=new_waterways[~new_waterways.from_tdx].geometry,
+        old_line_strings=new_waterways[new_waterways.from_tdx].geometry, old_stream_order=old_stream_order
+    )
+    stream_generator = StreamGenerator(
+        node_generator, tdx_stream_id=stream_id, old_target=old_target_id, old_sources=old_source_ids
+    )
+    stream_generator.gdf.to_parquet(basin_paths.save_path)
+    return stream_generator.gdf
 
 
-def merge_dfs(input_list: list):
+def merge_dfs(input_list: list) -> gpd.GeoDataFrame:
     """
     Parameters
     ----------
@@ -181,8 +176,10 @@ if __name__ == "__main__":
     s = tt()
     # bbox = (32.1, .5, 33.1, 1)
     # bbox = (29.1, -2.5, 30, -1.5)
-    y, x = -2.067971, 30.052090
-    bbox = (x - .5, y - .5, x + .5, y + .5)
+    # y, x = -1.8248828178023107, 30.424549297438947
+    y, x = 6.106896, 35.945688
+
+    bbox = (x - .001, y - .001, x + .001, y + .001)
     # 0.514538, 32.426492
     # shapelybox = shapely.box(32.5, -.5, 33.5, .5)
     hydro_level2 = gpd.read_file(ppaths.country_data/'basins/hybas_af_lev01-12_v1c/hybas_af_lev02_v1c.shp', bbox=bbox)
@@ -192,32 +189,53 @@ if __name__ == "__main__":
     basins_path = ppaths.country_data/f'tdx_basins/basin_{h2_id}.gpkg'
     all_streams = gpd.read_file(streams_path, bbox=bbox)
     all_basins = gpd.read_file(basins_path, bbox=bbox)
+    print(len(all_streams))
     # sid = all_streams.LINKNO.to_list()[0]
     # ax = all_streams.plot()
     # all_basins.exterior.plot(ax=ax, color='black')
     times = []
+    num_streams = []
     print(len(all_basins))
     sid_list = all_streams.LINKNO.to_list()
     all_streams = all_streams.set_index('LINKNO')
-    for sid in sid_list[:1]:
+    ind = 10
+    # for sid in sid_list[ind:ind+1]:
+    for sid in sid_list[:100]:
         basin_geometries = all_basins[all_basins.streamID == sid].reset_index(drop=True)
         if len(basin_geometries) > 0:
             basin_geometries['area'] = basin_geometries.area
             basin_geometries = basin_geometries.sort_values(by='area', ascending=False).reset_index(drop=True)
         basin_geom = basin_geometries.geometry[0]
         stream_geom = all_streams.loc[sid, 'geometry']
+        old_order = all_streams.loc[sid, 'strmOrder']
+        old_target = all_streams.loc[sid, 'DSLINKNO']
+        old_sources = [all_streams.loc[sid, 'USLINKNO1'], all_streams.loc[sid, 'USLINKNO2']]
+        # print(old_target, old_sources)
+        if old_sources == [-1, -1]:
+            old_sources = []
         s = tt()
-        new, init_new = run_for_basin(
-            stream_id=sid, hydro2_id=h2_id, basin_geometry=basin_geom, stream_geometry=stream_geom, overwrite=True,
-            plot_data=True
+        # try:
+        new = run_for_basin(
+            stream_id=sid, hydro2_id=h2_id, basin_geometry=basin_geom, stream_geometry=stream_geom,
+            old_target_id=old_target, old_source_ids=old_sources, old_stream_order=old_order, overwrite=True, plot_data=True
         )
-        node_gen = NodeGenerator(
-            new_line_strings=new[~new.from_tdx].geometry, old_line_strings=new[new.from_tdx].geometry, old_stream_order=6
-        )
-        stream_gen = StreamGenerator(node_gen)
+        # except:
+        #     ax = gpd.GeoSeries([basin_geom]).plot()
+        #     gpd.GeoSeries([stream_geom]).plot(ax=ax, color='orange')
+        #     break
+        # node_gen = NodeGenerator(
+        #     new_line_strings=new[~new.from_tdx].geometry, old_line_strings=new[new.from_tdx].geometry, old_stream_order=6
+        # )
+        # stream_gen = StreamGenerator(node_gen)
+        if new.stream_id.max() + 1 == 149:
+            ax = new.plot('stream_order', legend=True)
+            break
+        num_streams.append(new.stream_id.max()+1)
         time_elapsed(s)
         # print(len(new[~new.from_tdx]), len(new[new.from_tdx]))
         times.append(tt()-s)
-        # ax = new.plot('from_tdx')
         # gpd.GeoSeries([basin_geom], crs=4326).boundary.plot(ax=ax)
         # init_new.plot()
+    new.plot('from_tdx')
+    print(np.mean(times))
+    print(max(num_streams))

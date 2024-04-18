@@ -1,6 +1,5 @@
 import networkx as nx
 import numpy as np
-from water.basic_functions import ppaths, tt, time_elapsed, my_pool
 from wwvec.basin_vectorization.basin_class import BasinData
 from collections import defaultdict
 from functools import cached_property
@@ -89,6 +88,7 @@ class Connector:
 
         """
         sources = self.component_information[self.main_component]['nodes']
+        self.graph.add_nodes_from(sources)
         targets = [
             component_info['min_elevation_node'] for (component, component_info) in self.component_information.items()
             if component != self.main_component
@@ -97,7 +97,6 @@ class Connector:
         components_seen = {self.main_component}
         paths_to_return = {}
         for i, cutoff in enumerate(cut_offs):
-            # num_added = []
             paths = nx.multi_source_dijkstra_path(
                 G=self.graph, sources=sources, cutoff=cutoff
             )
@@ -123,8 +122,6 @@ class Connector:
                     sources += self.component_information[new_component]['nodes']
                     components_seen.add(new_component)
                     targets.remove(target)
-            #         num_added.append(target)
-            # print(len(num_added))
             if len(targets) == 0:
                 break
         return paths_to_return, init_targets, components_seen
@@ -200,7 +197,3 @@ class Connector:
                  for (row, col) in nodes_list for i in indices for j in indices
                  if (row+i, col+j) in self.nodes and (i != 0 or j != 0)]
         self.graph.add_weighted_edges_from(edges)
-        # edges = [[(row, col), (row+i, col+j)]
-        #          for (row, col) in nodes_list for i in indices for j in indices
-        #          if (row+i, col+j) in self.nodes and (i != 0 or j != 0)]
-        # self.graph.add_edges_from(edges)

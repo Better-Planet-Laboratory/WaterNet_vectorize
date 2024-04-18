@@ -1,12 +1,11 @@
 from functools import cached_property
-
-from wwvec.paths import BasinPaths
 import shapely
-from wwvec.basin_vectorization.cut_bbox_raster import make_bbox_raster
 import numpy as np
 from rasterio import features
-from wwvec.raster_to_vector.thin_grid import thinner
-from wwvec.raster_to_vector.components import find_raster_components
+from wwvec.paths import BasinPaths
+from wwvec.basin_vectorization.cut_bbox_raster import make_bbox_raster
+from wwvec.basin_vectorization.thin_grid import thinner
+from wwvec.basin_vectorization.components import find_raster_components
 import xarray as xr
 
 

@@ -9,8 +9,8 @@ import numpy as np
 
 
 def get_extensions():
-    extensions = [Extension('*', sources=['src/wwvec/raster_to_vector/components.pyx']),
-                  Extension('*', sources=['src/wwvec/raster_to_vector/thin_grid.pyx'])]
+    extensions = [Extension('*', sources=['src/wwvec/basin_vectorization/components.pyx']),
+                  Extension('*', sources=['src/wwvec/basin_vectorization/thin_grid.pyx'])]
     return extensions
 
 

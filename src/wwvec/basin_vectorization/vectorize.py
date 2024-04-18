@@ -1,16 +1,68 @@
 import shapely
 import numpy as np
-from water.basic_functions import ppaths, tt, time_elapsed
 import sys
 import geopandas as gpd
 import pandas as pd
-import matplotlib.pyplot as plt
 from functools import cached_property
 from wwvec.basin_vectorization.basin_class import BasinData
 from collections import defaultdict
+
+# The investigate_row_col method is called recursively, and the lines can get pretty long. In the long run, it might
+# be better to rewrite that function as a loop.
 sys.setrecursionlimit(100000000)
 
+
+# We generally want to make all waterway segments up to intersections (so a waterway only intersects another waterway at
+# its head or tail). We then connect those waterways to the reference waterways. This is useful if one of our waterways
+# runs parallel to a reference waterway, we won't connect each cell, only the head or tail (or one central point if
+# neither the head or tail boarders the reference waterway).
+
 class Vectorizer:
+    """
+    Vectorizer class
+
+    This class is responsible for vectorizing the thinned waterways data in a given basin.
+
+    Attributes:
+        bounds (tuple): The bounds of the basin in the form (minx, miny, maxx, maxy).
+        x_res (float): The x resolution of the basin data.
+        y_res (float): The y resolution of the basin data.
+        reference_waterway_data (list): A list of shapely LineString objects representing the reference waterway data.
+        thin_grid (np.ndarray): The thin grid representation of the waterways data.
+        connecting_points_coordinates (set): The set of coordinates for all cells that border the tdx waterways.
+        list_of_cell_lists (list): A list of cell lists.
+        line_strings (list): A list of shapely LineString objects representing the waterways.
+        intersection_points (list): A list of intersection points between the waterways and the tdx waterways.
+        connections_seen (defaultdict): A defaultdict that keeps track of the connections seen between waterways.
+        clean_embed (np.ndarray): The copy of the thin grid with all cells labeled as 2 assigned a value of 0.
+        count_grid (np.ndarray): A grid whose cells are the number of neighboring cells that are waterways.
+        init_count_copy (np.ndarray): A copy of the count grid.
+        init_count_grid (np.ndarray): A copy of the count grid.
+        new_linestrings (list): A list of new line strings representing the waterways.
+
+    Methods:
+        reference_waterway_points() -> list: Returns a list of shapely Point objects representing the reference waterway points.
+        make_connecting_points_coordinates() -> set: Make the set of coordinates for all cells that border the tdx waterways.
+        connecting_lines() -> list: Makes a list of linestrings connecting the model's linestrings to the tdx linestrings.
+        make_the_line_string_gdf() -> None: Makes a GeoDataFrame with two columns, one indicating if the waterway came from
+            tdx-hydro, the other is the geometry column.
+        connect_to_base_waterways() -> None: Determines the points for the model's waterways which will be connected to the
+            tdx-waterways.
+        embed_in_larger(grid: np.ndarray, side_increase: int) -> np.ndarray: Embeds the grid in a larger grid for convenience.
+        make_count_8_grid(grid: np.ndarray) -> np.ndarray: Makes a grid whose cells are the number of neighboring cells
+            that are waterways.
+        make_all_cell_lists() -> None: Updates list_of_cell_lists which will be used to make line strings.
+        add_remaining_cell_lists() -> None: Check and add all cells that haven't been fully investigated yet.
+        make_all_cell_lists_starting_at_1(investigate_all: bool=False) -> None: Investigate all cells that border only one
+            other cell (these should be sources or targets of waterways).
+        make_all_cell_lists_starting_at_2(investigate_all: bool=False) -> None: Investigate all cells that boarder two
+            other cells (so somewhere in the middle of a waterway)
+        add_to_connections_seen(node1, node2): A dicitonary that keeps track of the connections seen.
+        investigate_row_col(row, col, cell_list, investigate_all: bool=False) -> None: Investigates a cell,
+            then investigates any adjacent cells under appropriate conditions
+        row_col_array_to_midpoint_coordinates(row_col_array)-> None: Coverts the cell (row, col) to its midpoint coordinates.
+        make_shapely_line_strings() -> None: Makes a shapely LineString object representing the waterways.
+    """
     def __init__(
             self, thin_grid: np.ndarray, reference_waterway_data: list[shapely.LineString], basin_data: BasinData
     ):
@@ -18,7 +70,8 @@ class Vectorizer:
         self.x_res, self.y_res = np.abs(basin_data.basin_probability.rio.resolution())
         self.reference_waterway_data = reference_waterway_data
         self.thin_grid = thin_grid.copy()
-        # self.connecting_dict = self.get_connecting_lines()
+        self.connecting_points_coordinates = self.make_connecting_points_coordinates()
+        self.list_of_cell_lists = []
         self.line_strings = []
         self.intersection_points = []
         self.connections_seen = defaultdict(set)
@@ -27,12 +80,16 @@ class Vectorizer:
         self.count_grid = self.make_count_8_grid(self.clean_embed)
         self.init_count_copy = self.count_grid.copy()
         self.init_count_grid = self.count_grid.copy()
-        self.make_all_simple_linestrings()
+        self.make_all_cell_lists()
         self.make_shapely_line_strings()
         self.connect_to_base_waterways()
+        self.make_the_line_string_gdf()
 
     @cached_property
     def reference_waterway_points(self) -> list[shapely.Point]:
+        """
+        Returns a list of shapely.Point objects representing the reference waterway points.
+        """
         points = []
         for waterway in self.reference_waterway_data:
             if hasattr(waterway, 'geoms'):
@@ -43,12 +100,11 @@ class Vectorizer:
         reference_waterway_points = np.array(points)
         return reference_waterway_points
 
-    def add_to_connections_seen(self, node1, node2):
-        self.connections_seen[node1].add(node2)
-        self.connections_seen[node2].add(node1)
 
-    @cached_property
-    def connecting_points_coordinates(self) -> set:
+    def make_connecting_points_coordinates(self) -> set:
+        """
+        Make the set of coordinates for all cells that boarder the tdx waterways.
+        """
         rows, cols = np.where(self.thin_grid == 1)
         connecting_row_cols = []
         connecting_points = set()
@@ -60,49 +116,37 @@ class Vectorizer:
         if len(connecting_row_cols) > 0:
             coords = self.row_col_array_to_midpoint_coordinates(connecting_row_cols)
             connecting_points.update([(x, y) for (x, y) in coords])
-            # connecting_points = shapely.points(coords)
-            # tree = shapely.STRtree(self.reference_waterway_points)
-            # nearest_points = tree.query_nearest(geometry=connecting_points)
-            # for i, j in zip(*nearest_points):
-            #     connecting_dict[tuple(coords[i])] = {
-            #         'line': shapely.LineString([connecting_points[i], self.reference_waterway_points[j]]),
-            #         'point': self.reference_waterway_points[j].coords[0]
-            #     }
         return connecting_points
 
+    @cached_property
+    def connecting_lines(self) -> list[shapely.LineString]:
+        """
+        Makes a list of linestrings connecting the model's linestrings to the tdx linestrings.
+        """
+        if len(self.intersection_points) > 0:
+            connecting_points = shapely.points(self.intersection_points)
+            tree = shapely.STRtree(self.reference_waterway_points)
+            nearest_points = tree.query_nearest(geometry=connecting_points)
+            connecting_lines = shapely.linestrings(
+                [
+                    (connecting_points[i].coords[0], self.reference_waterway_points[j].coords[0])
+                    for i, j in zip(*nearest_points)
+                ]
+            )
+            self.intersection_points = [self.reference_waterway_points[j].coords[0] for i, j in zip(*nearest_points)]
+            return list(connecting_lines)
+        return []
 
-    def connect_to_base_waterways(self) -> None:
-        new_linestrings = []
-        connecting_points_coordinates_list = []
-        for line_string in self.line_strings:
-            to_add = [line_string]
-            coords_list = line_string.coords
-            head_coords = coords_list[0]
-            tail_coords = coords_list[-1]
-            if head_coords in self.connecting_dict and tail_coords in self.connecting_dict:
-                to_add = []
-            elif head_coords in self.connecting_dict:
-                to_add.append(self.connecting_dict[head_coords]['line'])
-                self.intersection_points.append(self.connecting_dict[head_coords]['point'])
-            elif tail_coords in self.connecting_dict:
-                to_add.append(self.connecting_dict[tail_coords]['line'])
-                self.intersection_points.append(self.connecting_dict[tail_coords]['point'])
-            else:
-                for coords in coords_list:
-                    if coords in self.connecting_dict:
-                        to_add.append(self.connecting_dict[coords]['line'])
-                        self.intersection_points.append(self.connecting_dict[coords]['point'])
-                        break
-            if len(to_add) > 0:
-                to_add_geom = shapely.unary_union(to_add)
-                if hasattr(to_add_geom, 'geoms'):
-                    new_linestrings.extend(to_add_geom.geoms)
-                else:
-                    new_linestrings.append(to_add_geom)
-        num_new = len(new_linestrings)
+
+    def make_the_line_string_gdf(self) -> None:
+        """
+        Makes a geodataframe with two columns, one indicating if the waterway came from tdx-hydro, the other is the
+        geometry column.
+        """
+        num_new = len(self.new_linestrings)
         num_old = len(self.reference_waterway_data)
         self.line_strings = gpd.GeoDataFrame(
-            {'from_tdx': [False]*num_new, 'geometry': [geometry for geometry in new_linestrings]},
+            {'from_tdx': [False]*num_new, 'geometry': [geometry for geometry in self.new_linestrings]},
             crs=4326
         )
         old_data = gpd.GeoDataFrame(
@@ -112,7 +156,42 @@ class Vectorizer:
         self.line_strings['from_tdx'] = self.line_strings['from_tdx'].astype(bool)
 
 
+    def connect_to_base_waterways(self) -> None:
+        """
+        Determines the points for the models waterways which will be connected to the tdx-waterways.
+        """
+        new_linestrings = []
+        connecting_points_coordinates_list = []
+        for line_string in self.line_strings:
+            coords_list = line_string.coords
+            head_coords = tuple(coords_list[0])
+            tail_coords = tuple(coords_list[-1])
+            if head_coords in self.connecting_points_coordinates and tail_coords in self.connecting_points_coordinates:
+                # If the waterway forms a closed loop with the tdx waterways, we ignore it.
+                continue
+            else:
+                new_linestrings.append(line_string)
+                if head_coords in self.connecting_points_coordinates:
+                    self.intersection_points.append(head_coords)
+                elif tail_coords in self.connecting_points_coordinates:
+                    self.intersection_points.append(tail_coords)
+                else:
+                    # If neither the head or tail boarders a tdx waterway, check if any of other points do.
+                    for coords in coords_list:
+                        if coords in self.connecting_points_coordinates:
+                            self.intersection_points.append(coords)
+                            break
+        new_linestrings += self.connecting_lines
+        self.new_linestrings = new_linestrings
+
+
+
     def embed_in_larger(self, grid: np.ndarray, side_increase: int) -> np.ndarray:
+        """
+        embeds the grid in a larger grid for convience. We will look at subgrids grid[row-1:row+2, col-1:col+2],
+         and in the embeded grid we will always have 1<=row<=old_num_rows, 1<=col<=old_num_col so we never go out of
+          bounds in the embedded grid.
+        """
         num_rows, num_cols = grid.shape
         num_rows += 2*side_increase
         num_cols += 2*side_increase
@@ -121,6 +200,9 @@ class Vectorizer:
         return copy
 
     def make_count_8_grid(self, grid: np.ndarray) -> np.ndarray:
+        """
+        Makes a grid whose cells are the number of neighboring cells that are waterways. 'count_8' for 8 connectivity.
+        """
         grid = grid.copy()
         grid[grid > 0] = 1
         count_grid = np.zeros(grid.shape, dtype=np.int16)
@@ -130,49 +212,62 @@ class Vectorizer:
         count_grid = count_grid
         return count_grid
 
-    def make_all_simple_linestrings(self) -> None:
+    def make_all_cell_lists(self) -> None:
+        """Updates list_of_cell_lists which will be used to make line strings"""
         while np.any(self.count_grid == 1):
-            self.make_all_linestrings_starting_at_1()
+            self.make_all_cell_lists_starting_at_1()
         self.step_1 = self.count_grid.copy()
-        self.make_all_linestrings_starting_at_2()
+        self.make_all_cell_lists_starting_at_2()
         while np.any(self.count_grid == 1):
-            self.make_all_linestrings_starting_at_1()
-        self.add_remaining()
+            self.make_all_cell_lists_starting_at_1()
+        self.add_remaining_cell_lists()
 
-    def add_remaining(self) -> None:
+    def add_remaining_cell_lists(self) -> None:
+        """Check and add all cells that haven't been fully investigated yet."""
         while np.any(self.count_grid>0):
             rows, cols = np.where(self.count_grid >= 1)
             for row, col in zip(rows, cols):
-                line_string_list = [(row, col)]
-                self.line_strings.append(line_string_list)
-                self.investigate_row_col(row, col, line_string_list, True)
+                cell_list = [(row, col)]
+                self.list_of_cell_lists.append(cell_list)
+                self.investigate_row_col(row, col, cell_list, True)
 
-    def make_all_linestrings_starting_at_1(self, investigate_all: bool=False) -> None:
+    def make_all_cell_lists_starting_at_1(self, investigate_all: bool=False) -> None:
+        """Investigate all cells that boarder only one other cell (these should be sources or targets of waterways)"""
         rows, cols = np.where(self.count_grid == 1)
         for row, col in zip(rows, cols):
             if self.count_grid[row, col] == 1:
-                line_string_list = [(row, col)]
-                self.line_strings.append(line_string_list)
-                self.investigate_row_col(row, col, line_string_list, investigate_all)
+                cell_list = [(row, col)]
+                self.list_of_cell_lists.append(cell_list)
+                self.investigate_row_col(row, col, cell_list, investigate_all)
 
-    def make_all_linestrings_starting_at_2(self, ignore_init: bool=False) -> None:
+    def make_all_cell_lists_starting_at_2(self, ignore_init: bool=False) -> None:
+        """Investigate all cells that boarder two other cells (so somewhere in the middle of a waterway)"""
         if ignore_init:
             rows, cols = np.where((self.count_grid == 2))
         else:
             rows, cols = np.where((self.count_grid == 2) & (self.init_count_grid == 2))
         for row, col in zip(rows, cols):
-            line_string_list = [(row, col)]
+            cell_list = [(row, col)]
             if self.count_grid[row, col] > 0:
-                self.investigate_row_col(row, col, line_string_list)
+                self.investigate_row_col(row, col, cell_list)
             if self.count_grid[row, col] > 0:
-                line_string_list.reverse()
-                self.investigate_row_col(row, col, line_string_list)
-            if len(line_string_list) > 1:
-                self.line_strings.append(line_string_list)
+                cell_list.reverse()
+                self.investigate_row_col(row, col, cell_list)
+            if len(cell_list) > 1:
+                self.list_of_cell_lists.append(cell_list)
+
+    def add_to_connections_seen(self, node1: (int, int), node2: (int, int)) -> None:
+        """
+        adds nodes to a dictionary of sets of connections seen. Used so that we don't turn around while investigating
+        a cell.
+        """
+        self.connections_seen[node1].add(node2)
+        self.connections_seen[node2].add(node1)
 
     def investigate_row_col(
-            self, row: int, col: int, line_string_list: list[shapely.LineString], investigate_all: bool=False
+            self, row: int, col: int, cell_list: list[shapely.LineString], investigate_all: bool=False
     ) -> None:
+        """Investigates a cell, then investigates any adjacent cells under appropriate conditions"""
         self.count_grid[row, col] -= 1
         row2, col2 = None, None
         for i, j in [(1, 0), (-1, 0), (0, 1), (0, -1),
@@ -183,33 +278,30 @@ class Vectorizer:
                     self.add_to_connections_seen((row, col), (row1, col1))
                     self.count_grid[row1, col1] -= 1
                     if self.init_count_grid[row1, col1] == 1 and not investigate_all:
-                        line_string_list.append((row1, col1))
+                        cell_list.append((row1, col1))
                     elif self.init_count_grid[row1, col1] == 2 and not investigate_all:
-                        line_string_list.append((row1, col1))
-                        self.investigate_row_col(row1, col1, line_string_list, investigate_all)
+                        cell_list.append((row1, col1))
+                        self.investigate_row_col(row1, col1, cell_list, investigate_all)
                     else:
-                        line_string_list.append((row1, col1))
+                        cell_list.append((row1, col1))
                     break
         else:
-            line_string_list.pop()
-            # raise Exception('Line string not found')
+            # In this case there is only one cell in the list, so we can't make a line string from it. This can occur
+            # if the cell boarders the reference waterways, but no other model waterways cells.
+            cell_list.pop()
 
-
-    def row_col_array_to_midpoint_coordinates(self, row_col_array):
+    def row_col_array_to_midpoint_coordinates(self, row_col_array) -> np.ndarray:
         x_resolution = self.x_res
-        y_resolution = self.y_res
+        y_resolution = np.abs(self.y_res)
         x_min, _, _, y_max = self.bounds
         x_y_array = np.zeros(row_col_array.shape)
-        if y_resolution < 0:
-            y_resolution = -y_resolution
         x_y_array[:, 0] = x_min + x_resolution*(row_col_array[:, 1] + .5)
         x_y_array[:, 1] = y_max - y_resolution*(row_col_array[:, 0] + .5)
         return x_y_array
 
     def make_shapely_line_strings(self) -> None:
-        row_col_lists = self.line_strings
-        self.line_strings = []
-        for row_col_list in row_col_lists:
+        for row_col_list in self.list_of_cell_lists:
+            # We have to decrease by 1 because row,col are from the embedded grid.
             row_col_array = np.array(row_col_list) - 1
             if len(row_col_array) > 1:
                 midpoint_coordinates = self.row_col_array_to_midpoint_coordinates(row_col_array)
