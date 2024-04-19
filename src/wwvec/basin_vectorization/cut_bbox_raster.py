@@ -2,9 +2,68 @@ import rioxarray as rxr
 from rioxarray.merge import merge_arrays
 import xarray as xr
 from pathlib import Path
-from water.make_country_waterways.cut_data import make_directory_gdf
 import shapely
 import numpy as np
+import rasterio as rio
+from pyproj import Transformer
+from pyproj.crs import CRS
+import geopandas as gpd
+import os
+
+
+def name_to_box(file_name: str, buffer: float = 0.) -> shapely.box:
+    """
+    Parameters
+    ----------
+    file_name : str
+        The name of the file from which to create the box.
+    buffer : float, optional
+        The buffer size to be added to the box dimensions. Default is 0.
+
+    Returns
+    -------
+    shapely.box
+        The bounding box created from the file name.
+
+    """
+    bbox = file_name.split('.tif')[0].split('_')[1:]
+    bbox = [float(val) - buffer*(-1)**(ind//2) for ind, val in enumerate(bbox)]
+    return shapely.box(*bbox)
+
+
+def make_directory_gdf(dir_path: Path, use_name: bool = True) -> gpd.GeoDataFrame:
+    """
+    Makes a GeoDataFrame whose entries correspond to the tif files in dir_path,
+    and whose geometry is the bounding box of the raster file in 4326. use_name assumes that the file has a name
+    like bbox_{w}_{s}_{e}_{n}.tif where w,s,e,n are the bounding box values.
+    """
+    dir_name = dir_path.name
+    parquet_path = dir_path/f'{dir_name}.parquet'
+    if not parquet_path.exists():
+        file_paths = list(dir_path.glob('*.tif'))
+        dir_gdf = {'file_name': [], 'geometry': []}
+        for file in file_paths:
+            dir_gdf['file_name'].append(file.name)
+            if use_name:
+                dir_gdf['geometry'].append(name_to_box(file.name, 0))
+            else:
+                with rio.open(file) as rio_f:
+                    crs = rio_f.crs
+                    crs_4326 = CRS.from_epsg(4326)
+                    bbox = tuple(rio_f.bounds)
+                    if crs != crs_4326:
+                        transformer = Transformer.from_crs(crs_from=crs, crs_to=crs_4326, always_xy=True)
+                        bbox = transformer.transform_bounds(*bbox)
+                    box = shapely.box(*bbox)
+                dir_gdf['geometry'].append(box)
+        dir_gdf = gpd.GeoDataFrame(dir_gdf, crs=4326)
+        dir_gdf.to_parquet(parquet_path)
+    else:
+        dir_gdf = gpd.read_parquet(parquet_path)
+        if len(dir_gdf) != len(list(dir_path.glob('*.tif'))):
+            os.remove(parquet_path)
+            dir_gdf = make_directory_gdf(dir_path)
+    return dir_gdf
 
 
 def get_file_paths_intersecting_bbox(
@@ -16,7 +75,7 @@ def get_file_paths_intersecting_bbox(
     Parameters
     ----------
     bbox : tuple or list
-        The bounding box coordinates in the form [xmin, ymin, xmax, ymax].
+        The bounding box coordinates in the form [x_min, y_min, x_max, y_max].
          The bounding box defines the region of interest for retrieving file paths.
 
     base_dir : Path
@@ -84,7 +143,7 @@ def make_bbox_raster(
     Parameters
     ----------
     bbox : list
-        A list containing the coordinates of the bounding box in the following format: [xmin, ymin, xmax, ymax].
+        A list containing the coordinates of the bounding box in the following format: [x_min, y_min, x_max, y_ max].
 
     base_dir : Path
         The base directory where the raster files are located.

@@ -10,6 +10,8 @@ import geopandas as gpd
 import pandas as pd
 import os
 from typing import Union
+
+
 PolygonType = Union[shapely.Polygon, shapely.MultiPolygon]
 LineStringType = Union[shapely.LineString, shapely.MultiLineString]
 
@@ -139,103 +141,84 @@ def run_for_basin(
     return stream_generator.gdf
 
 
-def merge_dfs(input_list: list) -> gpd.GeoDataFrame:
-    """
-    Parameters
-    ----------
-    input_list : list
-        A list of dictionaries containing 'hydro2_id' and 'stream_id' values.
-
-    Returns
-    -------
-    merged_df : DataFrame
-        A merged DataFrame containing the data from the specified paths.
-    """
-    paths = [BasinPaths(hydro2_id=val['hydro2_id'], stream_id=val['stream_id']).save_path for val in input_list]
-    merged_df = pd.concat([gpd.read_parquet(path) for path in paths if path.exists()], ignore_index=True)
-    return merged_df
-
-
-
-
-if __name__ == "__main__":
-    from water.basic_functions import ppaths, get_country_polygon, tt, time_elapsed
-    import warnings
-    import importlib
-    import wwvec
-    importlib.reload(wwvec.basin_vectorization.basin_class)
-    importlib.reload(wwvec.basin_vectorization.connect)
-    importlib.reload(wwvec.basin_vectorization.vectorize)
-    importlib.reload(wwvec.basin_vectorization.vectorize)
-    importlib.reload(wwvec.basin_vectorization.local_stream_order)
-    from wwvec.basin_vectorization.local_stream_order import NodeGenerator, StreamGenerator
-    from wwvec.basin_vectorization.vectorize import Vectorizer
-    from wwvec.basin_vectorization.basin_class import BasinData
-    from wwvec.basin_vectorization.connect import Connector
-    # warnings.filterwarnings("error", category=RuntimeWarning)
-    s = tt()
-    # bbox = (32.1, .5, 33.1, 1)
-    # bbox = (29.1, -2.5, 30, -1.5)
-    # y, x = -1.8248828178023107, 30.424549297438947
-    y, x = 6.106896, 35.945688
-
-    bbox = (x - .001, y - .001, x + .001, y + .001)
-    # 0.514538, 32.426492
-    # shapelybox = shapely.box(32.5, -.5, 33.5, .5)
-    hydro_level2 = gpd.read_file(ppaths.country_data/'basins/hybas_af_lev01-12_v1c/hybas_af_lev02_v1c.shp', bbox=bbox)
-    h2_id = hydro_level2.reset_index().HYBAS_ID[0]
-    # sid = 265071
-    streams_path = ppaths.country_data/f'tdx_streams/basin_{h2_id}.gpkg'
-    basins_path = ppaths.country_data/f'tdx_basins/basin_{h2_id}.gpkg'
-    all_streams = gpd.read_file(streams_path, bbox=bbox)
-    all_basins = gpd.read_file(basins_path, bbox=bbox)
-    print(len(all_streams))
-    # sid = all_streams.LINKNO.to_list()[0]
-    # ax = all_streams.plot()
-    # all_basins.exterior.plot(ax=ax, color='black')
-    times = []
-    num_streams = []
-    print(len(all_basins))
-    sid_list = all_streams.LINKNO.to_list()
-    all_streams = all_streams.set_index('LINKNO')
-    ind = 10
-    # for sid in sid_list[ind:ind+1]:
-    for sid in sid_list[:100]:
-        basin_geometries = all_basins[all_basins.streamID == sid].reset_index(drop=True)
-        if len(basin_geometries) > 0:
-            basin_geometries['area'] = basin_geometries.area
-            basin_geometries = basin_geometries.sort_values(by='area', ascending=False).reset_index(drop=True)
-        basin_geom = basin_geometries.geometry[0]
-        stream_geom = all_streams.loc[sid, 'geometry']
-        old_order = all_streams.loc[sid, 'strmOrder']
-        old_target = all_streams.loc[sid, 'DSLINKNO']
-        old_sources = [all_streams.loc[sid, 'USLINKNO1'], all_streams.loc[sid, 'USLINKNO2']]
-        # print(old_target, old_sources)
-        if old_sources == [-1, -1]:
-            old_sources = []
-        s = tt()
-        # try:
-        new = run_for_basin(
-            stream_id=sid, hydro2_id=h2_id, basin_geometry=basin_geom, stream_geometry=stream_geom,
-            old_target_id=old_target, old_source_ids=old_sources, old_stream_order=old_order, overwrite=True, plot_data=True
-        )
-        # except:
-        #     ax = gpd.GeoSeries([basin_geom]).plot()
-        #     gpd.GeoSeries([stream_geom]).plot(ax=ax, color='orange')
-        #     break
-        # node_gen = NodeGenerator(
-        #     new_line_strings=new[~new.from_tdx].geometry, old_line_strings=new[new.from_tdx].geometry, old_stream_order=6
-        # )
-        # stream_gen = StreamGenerator(node_gen)
-        if new.stream_id.max() + 1 == 149:
-            ax = new.plot('stream_order', legend=True)
-            break
-        num_streams.append(new.stream_id.max()+1)
-        time_elapsed(s)
-        # print(len(new[~new.from_tdx]), len(new[new.from_tdx]))
-        times.append(tt()-s)
-        # gpd.GeoSeries([basin_geom], crs=4326).boundary.plot(ax=ax)
-        # init_new.plot()
-    new.plot('from_tdx')
-    print(np.mean(times))
-    print(max(num_streams))
+# if __name__ == "__main__":
+#     from water.basic_functions import ppaths, get_country_polygon, tt, time_elapsed
+#     import warnings
+#     import importlib
+#     import wwvec
+#     importlib.reload(wwvec.basin_vectorization.basin_class)
+#     importlib.reload(wwvec.basin_vectorization.connect)
+#     importlib.reload(wwvec.basin_vectorization.vectorize)
+#     importlib.reload(wwvec.basin_vectorization.vectorize)
+#     importlib.reload(wwvec.basin_vectorization.local_stream_order)
+#     from wwvec.basin_vectorization.local_stream_order import NodeGenerator, StreamGenerator
+#     from wwvec.basin_vectorization.vectorize import Vectorizer
+#     from wwvec.basin_vectorization.basin_class import BasinData
+#     from wwvec.basin_vectorization.connect import Connector
+#     # warnings.filterwarnings("error", category=RuntimeWarning)
+#     s = tt()
+#     # bbox = (32.1, .5, 33.1, 1)
+#     # bbox = (29.1, -2.5, 30, -1.5)
+#     # y, x = -1.8248828178023107, 30.424549297438947
+#     y, x = 6.106896, 35.945688
+#
+#     bbox = (x - .001, y - .001, x + .001, y + .001)
+#     # 0.514538, 32.426492
+#     # shapelybox = shapely.box(32.5, -.5, 33.5, .5)
+#     hydro_level2 = gpd.read_file(ppaths.country_data/'basins/hybas_af_lev01-12_v1c/hybas_af_lev02_v1c.shp', bbox=bbox)
+#     h2_id = hydro_level2.reset_index().HYBAS_ID[0]
+#     # sid = 265071
+#     streams_path = ppaths.country_data/f'tdx_streams/basin_{h2_id}.gpkg'
+#     basins_path = ppaths.country_data/f'tdx_basins/basin_{h2_id}.gpkg'
+#     all_streams = gpd.read_file(streams_path, bbox=bbox)
+#     all_basins = gpd.read_file(basins_path, bbox=bbox)
+#     print(len(all_streams))
+#     # sid = all_streams.LINKNO.to_list()[0]
+#     # ax = all_streams.plot()
+#     # all_basins.exterior.plot(ax=ax, color='black')
+#     times = []
+#     num_streams = []
+#     print(len(all_basins))
+#     sid_list = all_streams.LINKNO.to_list()
+#     all_streams = all_streams.set_index('LINKNO')
+#     ind = 10
+#     # for sid in sid_list[ind:ind+1]:
+#     for sid in sid_list[:100]:
+#         basin_geometries = all_basins[all_basins.streamID == sid].reset_index(drop=True)
+#         if len(basin_geometries) > 0:
+#             basin_geometries['area'] = basin_geometries.area
+#             basin_geometries = basin_geometries.sort_values(by='area', ascending=False).reset_index(drop=True)
+#         basin_geom = basin_geometries.geometry[0]
+#         stream_geom = all_streams.loc[sid, 'geometry']
+#         old_order = all_streams.loc[sid, 'strmOrder']
+#         old_target = all_streams.loc[sid, 'DSLINKNO']
+#         old_sources = [all_streams.loc[sid, 'USLINKNO1'], all_streams.loc[sid, 'USLINKNO2']]
+#         # print(old_target, old_sources)
+#         if old_sources == [-1, -1]:
+#             old_sources = []
+#         s = tt()
+#         # try:
+#         new = run_for_basin(
+#             stream_id=sid, hydro2_id=h2_id, basin_geometry=basin_geom, stream_geometry=stream_geom,
+#             old_target_id=old_target, old_source_ids=old_sources, old_stream_order=old_order, overwrite=True, plot_data=True
+#         )
+#         # except:
+#         #     ax = gpd.GeoSeries([basin_geom]).plot()
+#         #     gpd.GeoSeries([stream_geom]).plot(ax=ax, color='orange')
+#         #     break
+#         # node_gen = NodeGenerator(
+#         #     new_line_strings=new[~new.from_tdx].geometry, old_line_strings=new[new.from_tdx].geometry, old_stream_order=6
+#         # )
+#         # stream_gen = StreamGenerator(node_gen)
+#         if new.stream_id.max() + 1 == 149:
+#             ax = new.plot('stream_order', legend=True)
+#             break
+#         num_streams.append(new.stream_id.max()+1)
+#         time_elapsed(s)
+#         # print(len(new[~new.from_tdx]), len(new[new.from_tdx]))
+#         times.append(tt()-s)
+#         # gpd.GeoSeries([basin_geom], crs=4326).boundary.plot(ax=ax)
+#         # init_new.plot()
+#     new.plot('from_tdx')
+#     print(np.mean(times))
+#     print(max(num_streams))

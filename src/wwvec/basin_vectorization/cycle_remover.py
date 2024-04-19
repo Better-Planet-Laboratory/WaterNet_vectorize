@@ -1,12 +1,31 @@
 import numpy as np
 import shapely
-import rioxarray as rxr
-import xarray as xr
 import networkx as nx
+import geopandas as gpd
+import xarray as xr
 
 
 class CycleRemover:
-    def __init__(self, waterways, intersection_points, elevation_data):
+    """
+
+    A class for removing cycles from waterway vector data.
+
+    Attributes:
+    - waterways (list): List of waterway geometries.
+    - intersection_points (list): List of intersection points.
+    - elevation_data (DataArray): DataArray containing elevation data.
+    - graph (DiGraph): Graph representing the waterway paths.
+
+    Methods:
+    - make_graph(): Creates a directed graph representing the waterway paths.
+    - add_edges_to_graph(): Adds edges to the graph based on the waterway paths and elevation data.
+    - get_coordinate_elevations(coordinates): Retrieves elevation values for given coordinates.
+    - find_paths(): Finds paths without cycles in the graph.
+
+    """
+    def __init__(
+            self, waterways: gpd.GeoDataFrame, intersection_points: list[(float, float)], elevation_data: xr.DataArray
+    ):
         self.waterways = waterways[~waterways.from_tdx].geometry.to_list()
         self.intersection_points = intersection_points
         self.elevation_data = elevation_data
@@ -53,11 +72,5 @@ class CycleRemover:
                     new_path.append(coords)
                     break
             if len(new_path) > 1:
-                try:
-                    new_paths.append(shapely.LineString(new_path))
-                except:
-                    print(new_path)
-                    print(path)
-                    # print(paths)
-                    raise Exception
+                new_paths.append(shapely.LineString(new_path))
         return new_paths

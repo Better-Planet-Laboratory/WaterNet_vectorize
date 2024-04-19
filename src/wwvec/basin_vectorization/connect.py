@@ -24,7 +24,7 @@ class Connector:
         elevation_grid (ndarray): The elevation grid of the basin.
         weight_grid (ndarray): The weight grid of the basin.
         component_grid (ndarray): The component grid of the basin.
-        component (int): The main component of the basin.
+        main_component (int): The main component of the basin.
         graph (nx.DiGraph): The graph representation of the basin.
 
     Methods:
@@ -34,7 +34,7 @@ class Connector:
         add_edges_to_graph(nodes_list): Adds edges to the graph based on the nodes list.
 
     """
-    def __init__(self, basin_data: BasinData, min_probability=None, max_elevation_diff: int=20,):
+    def __init__(self, basin_data: BasinData, min_probability=None, max_elevation_diff: int = 20,):
         if min_probability is None:
             min_probability = basin_data.min_val
         self.max_elevation_diff = max_elevation_diff

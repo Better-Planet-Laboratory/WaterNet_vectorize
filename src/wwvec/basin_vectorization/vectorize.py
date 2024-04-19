@@ -73,6 +73,7 @@ class Vectorizer:
         self.connecting_points_coordinates = self.make_connecting_points_coordinates()
         self.list_of_cell_lists = []
         self.line_strings = []
+        self.new_linestrings = []
         self.intersection_points = []
         self.connections_seen = defaultdict(set)
         self.thin_grid[thin_grid == 2] = 0
@@ -99,7 +100,6 @@ class Vectorizer:
                 points.extend(shapely.points(waterway.coords))
         reference_waterway_points = np.array(points)
         return reference_waterway_points
-
 
     def make_connecting_points_coordinates(self) -> set:
         """
@@ -185,8 +185,8 @@ class Vectorizer:
         self.new_linestrings = new_linestrings
 
 
-
-    def embed_in_larger(self, grid: np.ndarray, side_increase: int) -> np.ndarray:
+    @staticmethod
+    def embed_in_larger(grid: np.ndarray, side_increase: int) -> np.ndarray:
         """
         embeds the grid in a larger grid for convience. We will look at subgrids grid[row-1:row+2, col-1:col+2],
          and in the embeded grid we will always have 1<=row<=old_num_rows, 1<=col<=old_num_col so we never go out of
@@ -199,7 +199,8 @@ class Vectorizer:
         copy[side_increase:-side_increase, side_increase:-side_increase] = grid
         return copy
 
-    def make_count_8_grid(self, grid: np.ndarray) -> np.ndarray:
+    @staticmethod
+    def make_count_8_grid(grid: np.ndarray) -> np.ndarray:
         """
         Makes a grid whose cells are the number of neighboring cells that are waterways. 'count_8' for 8 connectivity.
         """
@@ -216,7 +217,6 @@ class Vectorizer:
         """Updates list_of_cell_lists which will be used to make line strings"""
         while np.any(self.count_grid == 1):
             self.make_all_cell_lists_starting_at_1()
-        self.step_1 = self.count_grid.copy()
         self.make_all_cell_lists_starting_at_2()
         while np.any(self.count_grid == 1):
             self.make_all_cell_lists_starting_at_1()

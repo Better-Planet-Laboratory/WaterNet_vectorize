@@ -2,7 +2,6 @@
 import cython as c
 import numpy as np
 cimport numpy as cnp
-from libc.math cimport floor
 cnp.import_array()
 ctypedef cnp.int8_t npint8
 ctypedef cnp.int16_t npint16

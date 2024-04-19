@@ -59,21 +59,23 @@ class BasinData:
     - weight_grid: The cells are given a weight based on how strongly the model thinks they are water.
     - min_value: The minimum acceptable waterway value for the cell to be considered as a node in the connection process
     """
+
     def __init__(
             self, basin_geometry: shapely.Polygon,
             stream_geometry: shapely.LineString,
-            paths: BasinPaths, bbox_buffer: float=0.005,
+            paths: BasinPaths, bbox_buffer: float = 0.005,
             **kwargs
     ):
         # Buffer the bounding box a tiny amount so no points land exactly on the boundary
         self.bbox_buffer = bbox_buffer
         """Buffer distance for the bounding box of the basin."""
+        self.min_val = .1
         self.paths = paths
         self.basin_geometry = basin_geometry
         self.stream_geometry = stream_geometry
         bbox = tuple(self.basin_geometry.bounds)
         self.grid_bbox = (bbox[0] - bbox_buffer, bbox[1] - bbox_buffer, bbox[2] + bbox_buffer, bbox[3] + bbox_buffer)
-        self.basin_probability, self.basin_elevation, self.basin_grid, self.waterway_grid\
+        self.basin_probability, self.basin_elevation, self.basin_grid, self.waterway_grid \
             = self.cut_basin_data(**kwargs)
         self.elevation_grid = self.basin_elevation[0].to_numpy().astype(np.int16)
         self.rounded_grid = self.make_rounded_grid(**kwargs)
@@ -86,7 +88,7 @@ class BasinData:
 
     def cut_basin_data(
             self, stream_buffer=.0001, **kwargs
-    ) -> (xr.DataArray, xr.DataArray, ):
+    ) -> (xr.DataArray, xr.DataArray,):
         """
         Cuts and merges the model waterway probability and elevation data for the basin, and burns the tdx basin and
         waterway data to a raster (using the same resolution and bounding box for the cut waterway data).
@@ -114,9 +116,9 @@ class BasinData:
 
         """
         bbox = self.grid_bbox
-        basin_probability = make_bbox_raster(bbox, base_dir=self.paths.waterways_grid)
+        basin_probability = make_bbox_raster(bbox, base_dir=self.paths.waterway_grids)
         basin_probability = basin_probability.astype(np.float32)/255
-        basin_elevation = make_bbox_raster(bbox, base_dir=self.paths.elevation_path)
+        basin_elevation = make_bbox_raster(bbox, base_dir=self.paths.elevation_grids)
         basin_elevation = basin_elevation.rio.reproject_match(basin_probability)
         shape = basin_probability[0].shape
         transform = basin_probability.rio.transform()
@@ -252,7 +254,7 @@ class BasinData:
         self.probability_grid[to_change] = 0
         self.component_grid[self.component_grid < 0] = 0
 
-    def make_weight_grid(self, min_val: float=.1, max_val: float=.5, **kwargs):
+    def make_weight_grid(self, min_val: float = .1, max_val: float = .5, **kwargs) -> np.ndarray:
         """
         The weight grid will be used to make graph weights.
         We want anything the model mostly thinks as water to have a value of 1 (which will have a small weight),
@@ -272,17 +274,18 @@ class BasinData:
         """
         self.min_val = min_val
         self.weight_grid = self.probability_grid.copy()
-        self.weight_grid = (self.weight_grid - min_val) / (max_val - min_val)
+        self.weight_grid = (self.weight_grid - min_val)/(max_val - min_val)
         self.weight_grid[self.weight_grid > 1] = 1
         self.weight_grid[self.weight_grid < 0] = 0
         self.weight_grid[self.weight_grid > 0] = -np.log2(self.weight_grid[self.weight_grid > 0])
         return self.weight_grid
 
+
 def remove_small_land(
         grid: np.ndarray, small_land_count: int, negative_component_counts: list,
         component_grid: np.ndarray, negative_elevation_difference: list,
-        small_land_count_elevation: int=250, elevation_difference_max: int=3
-):
+        small_land_count_elevation: int = 250, elevation_difference_max: int = 3
+) -> np.ndarray:
     """
     Remove small land components from a grid.
 
@@ -327,7 +330,7 @@ def remove_small_land(
 def remove_small_waterways(
         grid: np.ndarray, small_waterways_count: int, positive_component_counts: list,
         component_grid: np.ndarray, components_to_keep: set
-):
+) -> np.ndarray:
     """
     Parameters
     ----------
@@ -358,7 +361,7 @@ def remove_small_waterways(
     return grid
 
 
-def post_connections_clean(new_grid: np.ndarray, elevation_grid: np.ndarray, waterway_grid: np.ndarray):
+def post_connections_clean(new_grid: np.ndarray, elevation_grid: np.ndarray, waterway_grid: np.ndarray) -> np.ndarray:
     """
     Parameters
     ----------

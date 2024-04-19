@@ -18,11 +18,13 @@ class StreamNode:
         source_nodes (list): A list of source nodes connected to this node.
         source_streams (list): A list of source streams connected to this node.
         target_stream (Stream): The target stream connected to this node.
-        target_node (StreamNode): The target node connected to this node.
         target_coordinates (tuple): The coordinates of the target stream.
 
     Methods:
-        __init__(self, coordinates, node_info, stream_order=1, from_tdx=False, target_coordinates=None, source_coordinates=None):
+        __init__(
+            self, coordinates, node_info, stream_order=1, from_tdx=False,
+            target_coordinates=None, source_coordinates=None
+        ):
             Initializes a new StreamNode instance.
 
             Args:
@@ -57,9 +59,10 @@ class StreamNode:
             Returns:
                 StreamNode: The target node connected to this node, or None if there is no target node.
     """
+
     def __init__(
-            self, coordinates, node_info: dict, stream_order: int=1,
-            from_tdx: bool=False,
+            self, coordinates, node_info: dict, stream_order: int = 1,
+            from_tdx: bool = False,
             target_coordinates=None, source_coordinates=None,
     ):
         if coordinates not in node_info:
@@ -145,7 +148,7 @@ class StreamNode:
 
 class NodeGenerator:
     """
-    NodeGenerator class is responsible for generating nodes based on line strings.
+    NodeGenerator class is responsible for generating nodes based on linestrings.
 
     Args:
         new_line_strings (list): List of line strings representing our model's waterways.
@@ -166,6 +169,7 @@ class NodeGenerator:
         update_source_node_coordinates(node):
             Updates the set of source node coordinates.
     """
+
     def __init__(self, new_line_strings, old_line_strings, old_stream_order):
         self.node_info = {}
         self.source_node_coordinates = set()
@@ -197,7 +201,7 @@ class NodeGenerator:
         # The first node represents the source of the stream. If the stream actually has a source, it will be added
         # during that streams investigation.
         for ind, coords in enumerate(line_string_coords[:-1]):
-            target_coords = line_string_coords[ind+1]
+            target_coords = line_string_coords[ind + 1]
             self.add_node(
                 coordinates=coords, stream_order=stream_order, from_tdx=from_tdx,
                 target_coordinates=target_coords, source_coordinates=source_coords,
@@ -288,6 +292,7 @@ class Stream:
             the coordinates of the nodes in the stream.
     """
     stream_id = 0
+
     def __init__(self, start_node: StreamNode, stream_dict: dict):
         self.from_tdx = start_node.from_tdx
         self.nodes = [start_node]
@@ -335,6 +340,7 @@ class Stream:
         coords = [node.coordinates for node in self.nodes]
         return shapely.LineString(coords)
 
+
 class StreamGenerator:
     """
     Class responsible for generating all streams in the network.
@@ -370,9 +376,10 @@ class StreamGenerator:
     investigate_node(node)
         Investigate a given node.
     """
+
     def __init__(
-            self, node_generator: NodeGenerator, tdx_stream_id: int=0,
-            old_target: int=-1, old_sources: list[int]=()
+            self, node_generator: NodeGenerator, tdx_stream_id: int = 0,
+            old_target: int = -1, old_sources: list[int] = ()
     ):
         Stream.stream_id = 0
         self.stream_dict = {}
@@ -381,6 +388,7 @@ class StreamGenerator:
         self.investigate_source_node_coordinates(node_generator)
         self.old_target = old_target
         self.old_sources = old_sources
+
     @cached_property
     def gdf(self) -> gpd.GeoDataFrame:
         gdf = gpd.GeoDataFrame(
@@ -395,7 +403,7 @@ class StreamGenerator:
                     'tdx_source_ids': np.array(self.old_sources, dtype=np.int32),
                     'geometry': stream.line_string
                 }
-             for stream_id, stream in self.stream_dict.items()
+                for stream_id, stream in self.stream_dict.items()
             ], crs=4326
         )
         gdf['stream_id'] = gdf['stream_id'].astype(np.int32)
@@ -405,7 +413,6 @@ class StreamGenerator:
         gdf['tdx_target_id'] = gdf['tdx_target_id'].astype(np.int32)
         gdf['target_stream_id'] = gdf['target_stream_id'].fillna(-1).astype(np.int32)
         return gdf
-
 
     def investigate_source_node_coordinates(self, node_generator: NodeGenerator):
         # Iterate through each of the true source nodes, generating their streams
