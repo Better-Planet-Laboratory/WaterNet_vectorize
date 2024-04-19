@@ -15,54 +15,66 @@ sys.setrecursionlimit(100000000)
 # We generally want to make all waterway segments up to intersections (so a waterway only intersects another waterway at
 # its head or tail). We then connect those waterways to the reference waterways. This is useful if one of our waterways
 # runs parallel to a reference waterway, we won't connect each cell, only the head or tail (or one central point if
-# neither the head or tail boarders the reference waterway).
+# neither the head nor tail boarders the reference waterway).
 
 class Vectorizer:
+    # noinspection SpellCheckingInspection
     """
-    Vectorizer class
+        Vectorizer class
 
-    This class is responsible for vectorizing the thinned waterways data in a given basin.
+        This class is responsible for vectorizing the thinned waterways data in a given basin.
 
-    Attributes:
-        bounds (tuple): The bounds of the basin in the form (minx, miny, maxx, maxy).
-        x_res (float): The x resolution of the basin data.
-        y_res (float): The y resolution of the basin data.
-        reference_waterway_data (list): A list of shapely LineString objects representing the reference waterway data.
-        thin_grid (np.ndarray): The thin grid representation of the waterways data.
-        connecting_points_coordinates (set): The set of coordinates for all cells that border the tdx waterways.
-        list_of_cell_lists (list): A list of cell lists.
-        line_strings (list): A list of shapely LineString objects representing the waterways.
-        intersection_points (list): A list of intersection points between the waterways and the tdx waterways.
-        connections_seen (defaultdict): A defaultdict that keeps track of the connections seen between waterways.
-        clean_embed (np.ndarray): The copy of the thin grid with all cells labeled as 2 assigned a value of 0.
-        count_grid (np.ndarray): A grid whose cells are the number of neighboring cells that are waterways.
-        init_count_copy (np.ndarray): A copy of the count grid.
-        init_count_grid (np.ndarray): A copy of the count grid.
-        new_linestrings (list): A list of new line strings representing the waterways.
+        Attributes:
+            bounds (tuple): The bounds of the basin in the form (min_x, min_y, max_x, max_y).
+            x_res (float): The x resolution of the basin data.
+            y_res (float): The y resolution of the basin data.
+            reference_waterway_data (list):
+                A list of shapely LineString objects representing the reference waterway data.
+            thin_grid (np.ndarray): The thin grid representation of the waterways data.
+            connecting_points_coordinates (set): The set of coordinates for all cells that border the tdx waterways.
+            list_of_cell_lists (list): A list of cell lists.
+            line_strings (list): A list of shapely LineString objects representing the waterways.
+            intersection_points (list): A list of intersection points between the waterways and the tdx waterways.
+            connections_seen (defaultdict): A defaultdict that keeps track of the connections seen between waterways.
+            clean_embed (np.ndarray): The copy of the thin grid with all cells labeled as 2 assigned a value of 0.
+            count_grid (np.ndarray): A grid whose cells are the number of neighboring cells that are waterways.
+            init_count_copy (np.ndarray): A copy of the count grid.
+            init_count_grid (np.ndarray): A copy of the count grid.
+            new_linestrings (list): A list of new line strings representing the waterways.
 
-    Methods:
-        reference_waterway_points() -> list: Returns a list of shapely Point objects representing the reference waterway points.
-        make_connecting_points_coordinates() -> set: Make the set of coordinates for all cells that border the tdx waterways.
-        connecting_lines() -> list: Makes a list of linestrings connecting the model's linestrings to the tdx linestrings.
-        make_the_line_string_gdf() -> None: Makes a GeoDataFrame with two columns, one indicating if the waterway came from
-            tdx-hydro, the other is the geometry column.
-        connect_to_base_waterways() -> None: Determines the points for the model's waterways which will be connected to the
-            tdx-waterways.
-        embed_in_larger(grid: np.ndarray, side_increase: int) -> np.ndarray: Embeds the grid in a larger grid for convenience.
-        make_count_8_grid(grid: np.ndarray) -> np.ndarray: Makes a grid whose cells are the number of neighboring cells
-            that are waterways.
-        make_all_cell_lists() -> None: Updates list_of_cell_lists which will be used to make line strings.
-        add_remaining_cell_lists() -> None: Check and add all cells that haven't been fully investigated yet.
-        make_all_cell_lists_starting_at_1(investigate_all: bool=False) -> None: Investigate all cells that border only one
-            other cell (these should be sources or targets of waterways).
-        make_all_cell_lists_starting_at_2(investigate_all: bool=False) -> None: Investigate all cells that boarder two
-            other cells (so somewhere in the middle of a waterway)
-        add_to_connections_seen(node1, node2): A dicitonary that keeps track of the connections seen.
-        investigate_row_col(row, col, cell_list, investigate_all: bool=False) -> None: Investigates a cell,
-            then investigates any adjacent cells under appropriate conditions
-        row_col_array_to_midpoint_coordinates(row_col_array)-> None: Coverts the cell (row, col) to its midpoint coordinates.
-        make_shapely_line_strings() -> None: Makes a shapely LineString object representing the waterways.
-    """
+        Methods:
+            reference_waterway_points() -> list:
+                Returns a list of shapely Point objects representing the reference waterway points.
+            make_connecting_points_coordinates() -> set:
+                Make the set of coordinates for all cells that border the tdx waterways.
+            connecting_lines() -> list:
+                Makes a list of linestrings connecting the model's linestrings to the tdx linestrings.
+            make_the_line_string_gdf() -> None:
+                Makes a GeoDataFrame with two columns, one indicating if the waterway came from tdx-hydro,
+                 the other is the geometry column.
+            connect_to_base_waterways() -> None:
+                Determines the points for the model's waterways which will be connected to the tdx-waterways.
+            embed_in_larger(grid: np.ndarray, side_increase: int) -> np.ndarray:
+                Embeds the grid in a larger grid for convenience.
+            make_count_8_grid(grid: np.ndarray) -> np.ndarray:
+                Makes a grid whose cells are the number of neighboring cells that are waterways.
+            make_all_cell_lists() -> None:
+                Updates list_of_cell_lists which will be used to make line strings.
+            add_remaining_cell_lists() -> None:
+                Check and add all cells that haven't been fully investigated yet.
+            make_all_cell_lists_starting_at_1(investigate_all: bool=False) -> None:
+                Investigate all cells that border only one other cell (these should be sources or targets of waterways).
+            make_all_cell_lists_starting_at_2(investigate_all: bool=False) -> None:
+                Investigate all cells that boarder two other cells (so somewhere in the middle of a waterway)
+            add_to_connections_seen(node1, node2):
+                A dicitonary that keeps track of the connections seen.
+            investigate_row_col(row, col, cell_list, investigate_all: bool=False) -> None:
+                Investigates a cell, then investigates any adjacent cells under appropriate conditions
+            row_col_array_to_midpoint_coordinates(row_col_array)-> None:
+                Coverts the cell (row, col) to its midpoint coordinates.
+            make_shapely_line_strings() -> None:
+                Makes a shapely LineString object representing the waterways.
+        """
     def __init__(
             self, thin_grid: np.ndarray, reference_waterway_data: list[shapely.LineString], basin_data: BasinData
     ):
@@ -137,7 +149,6 @@ class Vectorizer:
             return list(connecting_lines)
         return []
 
-
     def make_the_line_string_gdf(self) -> None:
         """
         Makes a geodataframe with two columns, one indicating if the waterway came from tdx-hydro, the other is the
@@ -155,13 +166,11 @@ class Vectorizer:
         self.line_strings = pd.concat([old_data, self.line_strings], ignore_index=True)
         self.line_strings['from_tdx'] = self.line_strings['from_tdx'].astype(bool)
 
-
     def connect_to_base_waterways(self) -> None:
         """
         Determines the points for the models waterways which will be connected to the tdx-waterways.
         """
         new_linestrings = []
-        connecting_points_coordinates_list = []
         for line_string in self.line_strings:
             coords_list = line_string.coords
             head_coords = tuple(coords_list[0])
@@ -176,7 +185,7 @@ class Vectorizer:
                 elif tail_coords in self.connecting_points_coordinates:
                     self.intersection_points.append(tail_coords)
                 else:
-                    # If neither the head or tail boarders a tdx waterway, check if any of other points do.
+                    # If neither the head nor tail boarders a tdx waterway, check if any of other points do.
                     for coords in coords_list:
                         if coords in self.connecting_points_coordinates:
                             self.intersection_points.append(coords)
@@ -184,12 +193,11 @@ class Vectorizer:
         new_linestrings += self.connecting_lines
         self.new_linestrings = new_linestrings
 
-
     @staticmethod
     def embed_in_larger(grid: np.ndarray, side_increase: int) -> np.ndarray:
         """
         embeds the grid in a larger grid for convience. We will look at subgrids grid[row-1:row+2, col-1:col+2],
-         and in the embeded grid we will always have 1<=row<=old_num_rows, 1<=col<=old_num_col so we never go out of
+         and in the embeded grid we will always have 1<=row<=old_num_rows, 1<=col<=old_num_col, so we never go out of
           bounds in the embedded grid.
         """
         num_rows, num_cols = grid.shape
@@ -224,14 +232,14 @@ class Vectorizer:
 
     def add_remaining_cell_lists(self) -> None:
         """Check and add all cells that haven't been fully investigated yet."""
-        while np.any(self.count_grid>0):
+        while np.any(self.count_grid > 0):
             rows, cols = np.where(self.count_grid >= 1)
             for row, col in zip(rows, cols):
                 cell_list = [(row, col)]
                 self.list_of_cell_lists.append(cell_list)
                 self.investigate_row_col(row, col, cell_list, True)
 
-    def make_all_cell_lists_starting_at_1(self, investigate_all: bool=False) -> None:
+    def make_all_cell_lists_starting_at_1(self, investigate_all: bool = False) -> None:
         """Investigate all cells that boarder only one other cell (these should be sources or targets of waterways)"""
         rows, cols = np.where(self.count_grid == 1)
         for row, col in zip(rows, cols):
@@ -240,7 +248,7 @@ class Vectorizer:
                 self.list_of_cell_lists.append(cell_list)
                 self.investigate_row_col(row, col, cell_list, investigate_all)
 
-    def make_all_cell_lists_starting_at_2(self, ignore_init: bool=False) -> None:
+    def make_all_cell_lists_starting_at_2(self, ignore_init: bool = False) -> None:
         """Investigate all cells that boarder two other cells (so somewhere in the middle of a waterway)"""
         if ignore_init:
             rows, cols = np.where((self.count_grid == 2))
@@ -265,11 +273,10 @@ class Vectorizer:
         self.connections_seen[node2].add(node1)
 
     def investigate_row_col(
-            self, row: int, col: int, cell_list: list[shapely.LineString], investigate_all: bool=False
+            self, row: int, col: int, cell_list: list[(int, int)], investigate_all: bool = False
     ) -> None:
         """Investigates a cell, then investigates any adjacent cells under appropriate conditions"""
         self.count_grid[row, col] -= 1
-        row2, col2 = None, None
         for i, j in [(1, 0), (-1, 0), (0, 1), (0, -1),
                      (1, 1), (-1, 1), (1, -1), (-1, -1)]:
             row1, col1 = row + i, col + j
@@ -312,4 +319,3 @@ class Vectorizer:
             self.line_strings = list(self.line_strings.geoms)
         else:
             self.line_strings = [self.line_strings]
-

@@ -4,9 +4,7 @@ from pathlib import Path
 import yaml
 
 
-def save_yaml(file_name: Path,
-              obj
-              ) -> None:
+def save_yaml(file_name: Path, obj) -> None:
     with open(file_name, 'w') as file:
         yaml.dump(obj, file)
 

@@ -2,7 +2,7 @@ import shapely
 from wwvec.basin_vectorization.basin_class import BasinData, post_connections_clean
 from wwvec.basin_vectorization.connect import Connector
 from wwvec.basin_vectorization.cycle_remover import CycleRemover
-from wwvec.basin_vectorization.vectorize import Vectorizer
+from wwvec.basin_vectorization.vectorizer import Vectorizer
 from wwvec.basin_vectorization.local_stream_order import NodeGenerator, StreamGenerator
 from wwvec.paths import BasinPaths
 import numpy as np
@@ -60,7 +60,7 @@ def remove_cycles_and_make_gdfs(
 
     Returns
     -------
-    gpd.GeoDataFrame
+    gpd.GeoDataFrame:
         GeoDataFrame containing the waterways with cycles removed.
 
     """
@@ -140,7 +140,7 @@ def run_for_basin(
     stream_generator.gdf.to_parquet(basin_paths.save_path)
     return stream_generator.gdf
 
-
+#
 # if __name__ == "__main__":
 #     from water.basic_functions import ppaths, get_country_polygon, tt, time_elapsed
 #     import warnings
@@ -199,15 +199,16 @@ def run_for_basin(
 #         s = tt()
 #         # try:
 #         new = run_for_basin(
-#             stream_id=sid, hydro2_id=h2_id, basin_geometry=basin_geom, stream_geometry=stream_geom,
-#             old_target_id=old_target, old_source_ids=old_sources, old_stream_order=old_order, overwrite=True, plot_data=True
+#             stream_id=sid, hydro2_id=h2_id, basin_geometry=basin_geom, stream_geometry=stream_geom, plot_data=True,
+#             old_target_id=old_target, old_source_ids=old_sources, old_stream_order=old_order, overwrite=True,
 #         )
 #         # except:
 #         #     ax = gpd.GeoSeries([basin_geom]).plot()
 #         #     gpd.GeoSeries([stream_geom]).plot(ax=ax, color='orange')
 #         #     break
 #         # node_gen = NodeGenerator(
-#         #     new_line_strings=new[~new.from_tdx].geometry, old_line_strings=new[new.from_tdx].geometry, old_stream_order=6
+#         #     new_line_strings=new[~new.from_tdx].geometry,
+#         #     old_line_strings=new[new.from_tdx].geometry, old_stream_order=6
 #         # )
 #         # stream_gen = StreamGenerator(node_gen)
 #         if new.stream_id.max() + 1 == 149:
