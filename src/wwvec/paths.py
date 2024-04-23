@@ -63,7 +63,9 @@ class ProjPaths:
         self.tdx_streams = self.add_directory('tdx_streams', self.data)
         self.tdx_basins = self.add_directory('tdx_basins', self.data)
         self.merged_temp = self.add_directory('merged_temp', self.data)
-        self.hydrobasins = self.add_file('hydrobasins_level2', 'geojson', self.data, 'hydrobasins')
+        self.hydrobasins = self.add_file(
+            'hydrobasins_level2', 'geojson', self.data, 'hydrobasins'
+        )
         for key in self._path_config['directories']:
             self.__setattr__(key, self.add_directory(key, self.data))
         for key in self._path_config['files']:
@@ -86,11 +88,20 @@ class ProjPaths:
             directory_path.mkdir()
         return directory_path
 
+    def get_tdx_stream_network_file(self, hydro2_id):
+        stream_network_name = self._path_config['file_names']['tdx_stream_network'].replace('hydroidrpl', hydro2_id)
+        return self.tdx_streams/stream_network_name
+
+    def get_tdx_basin_file(self, hydro2_id):
+        basin_name = self._path_config['file_names']['tdx_basins'].replace('hydroidrpl', hydro2_id)
+        return self.tdx_basins/basin_name
+
 
 ppaths = ProjPaths()
 
 
 class BasinPaths:
+    """Paths for an individual basin"""
     def __init__(self, hydro2_id: int, stream_id: int):
         self.elevation_grids = self.add_directory('elevation_grids')
         self.waterway_grids = self.add_directory('waterway_grids')

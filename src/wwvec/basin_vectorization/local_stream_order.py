@@ -74,7 +74,7 @@ class StreamNode:
         self.original_stream_order = stream_order
         self.source_nodes = []
         self.source_streams = []
-        self.target_stream = None
+        self.target_stream = -1
         self.target_coordinates = target_coordinates
         self.add_source_node(source_coordinates)
 
@@ -397,7 +397,8 @@ class StreamGenerator:
                     'stream_id': stream_id,
                     'from_tdx': stream.from_tdx,
                     'source_stream_ids': np.array(stream.source_streams, dtype=np.int32),
-                    'target_stream_id': stream.target_stream, 'stream_order': stream.stream_order,
+                    'target_stream_id': stream.target_stream if stream.target_stream in self.stream_dict else -1,
+                    'stream_order': stream.stream_order,
                     'tdx_stream_id': self.tdx_stream_id,
                     'tdx_target_id': self.old_target,
                     'tdx_source_ids': np.array(self.old_sources, dtype=np.int32),

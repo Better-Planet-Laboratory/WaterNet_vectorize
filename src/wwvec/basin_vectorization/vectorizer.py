@@ -18,7 +18,6 @@ sys.setrecursionlimit(100000000)
 # neither the head nor tail boarders the reference waterway).
 
 class Vectorizer:
-    # noinspection SpellCheckingInspection
     """
         Vectorizer class
 
@@ -67,7 +66,7 @@ class Vectorizer:
             make_all_cell_lists_starting_at_2(investigate_all: bool=False) -> None:
                 Investigate all cells that boarder two other cells (so somewhere in the middle of a waterway)
             add_to_connections_seen(node1, node2):
-                A dicitonary that keeps track of the connections seen.
+                A dictionary that keeps track of the connections seen.
             investigate_row_col(row, col, cell_list, investigate_all: bool=False) -> None:
                 Investigates a cell, then investigates any adjacent cells under appropriate conditions
             row_col_array_to_midpoint_coordinates(row_col_array)-> None:
@@ -196,8 +195,8 @@ class Vectorizer:
     @staticmethod
     def embed_in_larger(grid: np.ndarray, side_increase: int) -> np.ndarray:
         """
-        embeds the grid in a larger grid for convience. We will look at subgrids grid[row-1:row+2, col-1:col+2],
-         and in the embeded grid we will always have 1<=row<=old_num_rows, 1<=col<=old_num_col, so we never go out of
+        embeds the grid in a larger grid for convince. We will look at sub-grids grid[row-1:row+2, col-1:col+2],
+         and in the embedded grid we will always have 1<=row<=old_num_rows, 1<=col<=old_num_col, so we never go out of
           bounds in the embedded grid.
         """
         num_rows, num_cols = grid.shape
