@@ -4,7 +4,7 @@ import sys
 import geopandas as gpd
 import pandas as pd
 from functools import cached_property
-from wwvec.basin_vectorization.basin_class import BasinData
+from wwvec.basin_vectorization.basin_data_class import BasinData
 from collections import defaultdict
 
 # The investigate_row_col method is called recursively, and the lines can get pretty long. In the long run, it might

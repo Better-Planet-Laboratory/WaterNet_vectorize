@@ -38,7 +38,7 @@ class CycleRemover:
 
     def add_edges_to_graph(self):
         edges = []
-        weight_lambda = lambda x: 0 if x < 0 else x if x < 20 else 1000
+        weight_lambda = lambda x: 0 if x < 0 else x
 
         for waterway in self.waterways:
             coordinates = np.array([list(coords) for coords in waterway.coords])

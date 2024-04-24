@@ -1,6 +1,6 @@
 import networkx as nx
 import numpy as np
-from wwvec.basin_vectorization.basin_class import BasinData
+from wwvec.basin_vectorization.basin_data_class import BasinData
 from collections import defaultdict
 from functools import cached_property
 

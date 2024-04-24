@@ -1,5 +1,5 @@
 import shapely
-from wwvec.basin_vectorization.basin_class import BasinData, post_connections_clean
+from wwvec.basin_vectorization.basin_data_class import BasinData, post_connections_clean
 from wwvec.basin_vectorization.connect import Connector
 from wwvec.basin_vectorization.cycle_remover import CycleRemover
 from wwvec.basin_vectorization.vectorizer import Vectorizer

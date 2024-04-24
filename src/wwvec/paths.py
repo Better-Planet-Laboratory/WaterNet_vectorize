@@ -89,11 +89,12 @@ class ProjPaths:
         return directory_path
 
     def get_tdx_stream_network_file(self, hydro2_id):
-        stream_network_name = self._path_config['file_names']['tdx_stream_network'].replace('hydroidrpl', hydro2_id)
+        stream_network_name = self._path_config['file_names']['tdx_stream_network']
+        stream_network_name = stream_network_name.replace('hydroidrpl', f'{hydro2_id}')
         return self.tdx_streams/stream_network_name
 
     def get_tdx_basin_file(self, hydro2_id):
-        basin_name = self._path_config['file_names']['tdx_basins'].replace('hydroidrpl', hydro2_id)
+        basin_name = self._path_config['file_names']['tdx_basins'].replace('hydroidrpl', f'{hydro2_id}')
         return self.tdx_basins/basin_name
 
 
@@ -118,18 +119,3 @@ class BasinPaths:
             return getattr(ppaths, directory_name)
         else:
             return ppaths.add_directory(directory_name, ppaths.data)
-
-
-# if __name__ == '__main__':
-#     from pprint import pprint
-#     # pprint(ppaths.__dict__)
-#     for key, value in ppaths.__dict__.items():
-#         if hasattr(value, 'exists'):
-#             print(key, value, value.exists())
-#     basin_paths = BasinPaths(hydro2_id=1020034170, stream_id=1)
-#
-#     print('\n')
-#     # pprint(basin_paths.__dict__)
-#     for key, value in basin_paths.__dict__.items():
-#         if hasattr(value, 'exists'):
-#             print(key, value, value.exists())

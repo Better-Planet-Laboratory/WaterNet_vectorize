@@ -66,7 +66,7 @@ class StreamOrderFixer:
         stream_order = row.stream_order
         tdx_id = row.tdx_stream_id
         if row.from_tdx:
-            stream_order = max(stream_order, self.new_stream_orders[tdx_id])
+            stream_order = max(stream_order, self.new_stream_orders.get(tdx_id, 1))
         return stream_order
 
     def investigate_all(self):
@@ -90,9 +90,9 @@ class StreamOrderFixer:
     @cached_property
     def new_stream_orders(self) -> dict:
         new_stream_orders = {
-            stream_id: stream_order for (stream_id, stream_order, source_id) in
+            stream_id: stream_order for (stream_id, stream_order, source_ids) in
             zip(self.reference_df.tdx_stream_id, self.reference_df.stream_order, self.reference_df.tdx_source_ids)
-            if -1 in source_id or len(source_id) == 0
+            if -1 in source_ids or len(source_ids) == 0
         }
         return new_stream_orders
 
@@ -138,7 +138,10 @@ class StreamOrderFixer:
         return max(source_order, old_stream_order)
 
     def get_new_stream_order(self, id):
-        source_1, source_2 = self.id_to_sources[id]
+        if len(self.id_to_sources[id]) == 2:
+            source_1, source_2 = self.id_to_sources[id]
+        else:
+            source_1, source_2 = -1, -1
         old_stream_order = self.old_stream_orders[id]
         source_1_order = self.new_stream_orders.get(source_1, old_stream_order)
         source_2_order = self.new_stream_orders.get(source_2, old_stream_order)
@@ -298,25 +301,3 @@ def fix_merged_dfs(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         'stream_id', 'target_stream_id', 'source_stream_ids', 'stream_order', 'from_tdx', 'tdx_stream_id', 'geometry'
     ]]
 
-#
-# if __name__ == '__main__':
-#     from wwvec.paths import ppaths
-#     from water.basic_functions import tt, time_elapsed
-#     s = tt()
-#     print('Loading data')
-#     gdf = gpd.read_parquet(ppaths.data / f'basins_level_2/1020000010_waterways.parquet')
-#     time_elapsed(s)
-#     # print('Stream order fixer')
-#     # s = tt()
-#     stream_order_fixer = StreamOrderFixer(gdf)
-#     stream_order_fixer.investigate_all()
-#     stream_order_fixer.add_fixed_stream_order()
-#     # time_elapsed(s)
-#
-#     s = tt()
-#     print('Pathing fixer')
-#     path_fixer = PathingFixer(gdf)
-#     time_elapsed(s)
-#     path_fixer.add_fixed_targets_and_sources()
-#     time_elapsed(s)
-#     print(gdf.columns)
