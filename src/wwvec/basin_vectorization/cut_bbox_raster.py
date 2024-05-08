@@ -127,7 +127,7 @@ def cut_and_merge_files(
         else:
             array = array.rio.set_nodata(0)
         subarray = array[:, (s <= array.y) & (array.y <= n), (w <= array.x) & (array.x <= e)]
-        if 0 not in subarray.shape:
+        if 0 not in subarray.shape and not np.all(np.isnan(subarray) | (subarray == subarray.rio.nodata)):
             subarray = subarray.where(subarray < 1e30, other=array.rio.nodata)
             arrays.append(subarray)
     return merge_arrays(arrays, bounds=(w, s, e, n))
@@ -156,3 +156,12 @@ def make_bbox_raster(
     file_paths = get_file_paths_intersecting_bbox(bbox, base_dir=base_dir)
     raster = cut_and_merge_files(file_paths, bbox)
     return raster
+
+
+if __name__ == '__main__':
+    # x, y = -162.34942503417992, 68.59222928209014
+    # bbox = (x - .001, y - .001, x + .001, y + .001)
+    bbox = (-162.38878064488608, 68.56182278297103, -162.3093096037457, 68.6129340450464)
+    from wwvec.paths import ppaths
+    based = ppaths.data/'model_outputs_zoom_level_6'
+    raster = make_bbox_raster(bbox=bbox, base_dir=based)

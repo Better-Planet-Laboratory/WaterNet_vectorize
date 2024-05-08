@@ -2,6 +2,7 @@ import geopandas as gpd
 from functools import cached_property
 from collections import defaultdict
 import numpy as np
+import sys
 
 # noinspection PyShadowingBuiltins
 class StreamOrderFixer:
@@ -290,7 +291,10 @@ def fix_merged_dfs(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         - 'tdx_stream_id'
         - 'geometry'
     """
+    sys.setrecursionlimit(100000000)
+    print('Fixing Stream Order')
     stream_order_fixer = StreamOrderFixer(gdf)
+    print("Fixing target and source ids")
     path_fixer = PathingFixer(stream_order_fixer.init_df)
     df = path_fixer.df
     df['stream_id'] = df['basin_stream_id']

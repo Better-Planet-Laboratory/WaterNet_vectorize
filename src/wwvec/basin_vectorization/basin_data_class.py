@@ -77,7 +77,9 @@ class BasinData:
         self.grid_bbox = (bbox[0] - bbox_buffer, bbox[1] - bbox_buffer, bbox[2] + bbox_buffer, bbox[3] + bbox_buffer)
         self.basin_probability, self.basin_elevation, self.basin_grid, self.waterway_grid \
             = self.cut_basin_data(**kwargs)
-        self.elevation_grid = self.basin_elevation[0].to_numpy().astype(np.int16)
+        self.elevation_grid = self.basin_elevation[0].to_numpy()
+        self.elevation_grid[self.elevation_grid > 32768] = 10000
+        self.elevation_grid = self.elevation_grid.astype(np.int16)
         self.rounded_grid = self.make_rounded_grid(**kwargs)
         self.component_grid, *_ = find_raster_components(self.rounded_grid, self.elevation_grid)
         self.main_component = self.find_main_component()
@@ -210,11 +212,16 @@ class BasinData:
         rows, cols = np.where(self.component_grid > 0)
         num_rows, num_cols = self.component_grid.shape
         min_elevation_points = {}
+        elevation_means = self.elevation_grid.copy()
+        for row_shift in range(-1, 2):
+            for col_shift in range(-1, 2):
+                if row_shift != 0 or col_shift != 0:
+                    shifted = self.elevation_grid[1-row_shift: num_rows-1-row_shift, 1-col_shift: num_cols-1-col_shift]
+                    elevation_means[1:-1, 1:-1] += shifted
+        elevation_means = elevation_means/9
         for (row, col) in zip(rows, cols):
             component = self.component_grid[row, col]
-            elevation = self.elevation_grid[
-                        max(row - 1, 0): min(row + 2, num_rows), max(col - 1, 0): min(col + 2, num_cols)
-                        ].mean()
+            elevation = elevation_means[row, col]
             component_info = min_elevation_points.setdefault(
                 component, {'min_elevation': elevation, 'node': (row, col)}
             )
@@ -239,11 +246,14 @@ class BasinData:
         min_elevation_points = self.find_component_min_elevation_points()
         main_components = {self.main_component} if self.main_component > 0 else set()
         for component in np.unique(self.component_grid):
+            # If more than 75% of the components cells are in the basin, we will keep it.
             if component > 0:
                 rows, cols = np.where(self.component_grid == component)
-                if self.basin_grid[rows, cols].sum()/len(rows) > .5:
+                if self.basin_grid[rows, cols].sum()/len(rows) > .75:
                     main_components.add(component)
         for row, col in min_elevation_points:
+            # If fewer than 75% of the components cells are in the basin, and the minimum elevation node for the
+            # component falls outside of the basin, then we will remove it.
             if self.basin_grid[row, col] == 0:
                 component = self.component_grid[row, col]
                 if component not in main_components:
@@ -314,15 +324,15 @@ def remove_small_land(
     to_change = []
     num_changed = 0
     for component, count in enumerate(negative_component_counts):
+        elevation_difference = negative_elevation_difference[-component]
         component = -component
         if component < 0:
-            elevation_difference = negative_elevation_difference[-component]
             if ((count < small_land_count) or
                     (count < small_land_count_elevation and elevation_difference < elevation_difference_max)):
-                num_changed += 1
+                num_changed += count
                 to_change.append(component)
     if len(to_change) > 0:
-        to_check = np.where(np.isin(component_grid, to_change))
+        to_check = np.isin(component_grid, to_change)
         grid[to_check] = 1
     return grid
 
@@ -361,7 +371,9 @@ def remove_small_waterways(
     return grid
 
 
-def post_connections_clean(new_grid: np.ndarray, elevation_grid: np.ndarray, waterway_grid: np.ndarray) -> np.ndarray:
+def post_connections_clean(
+        new_grid: np.ndarray, elevation_grid: np.ndarray, waterway_grid: np.ndarray
+) -> np.ndarray:
     """
     Parameters
     ----------
@@ -379,18 +391,19 @@ def post_connections_clean(new_grid: np.ndarray, elevation_grid: np.ndarray, wat
     cleaned_grid : numpy.ndarray
         The grid with cleaned connections.
     """
+    new_grid[new_grid > 1] = 1
     component_grid, _, negative_component_count, _, negative_elevation_difference = find_raster_components(
         new_grid, elevation_grid
     )
     new_grid = remove_small_land(
-        grid=new_grid, small_land_count=4, component_grid=component_grid,
+        grid=new_grid, small_land_count=20, component_grid=component_grid,
         negative_elevation_difference=negative_elevation_difference, negative_component_counts=negative_component_count,
-        small_land_count_elevation=10
+        small_land_count_elevation=400, elevation_difference_max=4
     )
     rows, cols = np.where(waterway_grid == 1)
-    new_grid[rows, cols] = 2
     if np.any(new_grid == 1):
-        new_grid = thinner(new_grid, elevation_grid)
+        new_grid[rows, cols] = 2
+        new_grid, _ = thinner(new_grid, elevation_grid)
     new_grid[rows, cols] = 2
     new_copy = new_grid.copy()
     new_copy[rows, cols] = 0
@@ -398,7 +411,7 @@ def post_connections_clean(new_grid: np.ndarray, elevation_grid: np.ndarray, wat
         new_copy, elevation_grid
     )
     cleaned_grid = remove_small_waterways(
-        grid=new_grid, small_waterways_count=4, positive_component_counts=positive_component_counts,
+        grid=new_grid, small_waterways_count=8, positive_component_counts=positive_component_counts,
         component_grid=component_grid, components_to_keep=set()
     )
     return cleaned_grid

@@ -37,15 +37,14 @@ class Connector:
     def __init__(self, basin_data: BasinData, min_probability=None, max_elevation_diff: int = 20,):
         if min_probability is None:
             min_probability = basin_data.min_val
+        self.probability_grid = basin_data.probability_grid
+        self.min_probability = min_probability
         self.max_elevation_diff = max_elevation_diff
         self.num_rows, self.num_cols = basin_data.component_grid.shape
-        self.nodes = {
-            (row, col) for row in range(self.num_rows) for col in range(self.num_cols)
-            if basin_data.probability_grid[row, col] > min_probability or basin_data.component_grid[row, col] > 0
-        }
         self.elevation_grid = basin_data.elevation_grid.astype(np.float32)
         self.weight_grid = basin_data.weight_grid
         self.component_grid = basin_data.component_grid
+        self.nodes_grid = (self.probability_grid > min_probability) | (self.component_grid > 0)
         self.main_component = basin_data.main_component
         self.graph = nx.DiGraph()
         self.add_edges_to_graph()
@@ -133,20 +132,6 @@ class Connector:
             new_weight_2 = self.get_weight(other_node, node)
             self.graph.adj[other_node][node]['weight'] = new_weight_2
 
-    @cached_property
-    def elevation_difference_grids(self):
-        elevation_difference_grids = {}
-        max_row, max_col = self.elevation_grid.shape
-        for row_shift in range(-1, 2):
-            for col_shift in range(-1, 2):
-                if row_shift != 0 or col_shift != 0:
-                    difference_grid = self.elevation_grid.copy()
-                    shifted_grid = difference_grid[1-row_shift:max_row-1-row_shift, 1-col_shift:max_col-1-col_shift]
-                    difference_grid[1:-1, 1:-1] = difference_grid[1:-1, 1:-1] - shifted_grid
-                    difference_grid = np.maximum(difference_grid, 0)
-                    difference_grid[difference_grid > self.max_elevation_diff] = 1e30
-                    elevation_difference_grids[(row_shift, col_shift)] = difference_grid
-        return elevation_difference_grids
 
     def get_weight(
             self, node_t, node_s,
@@ -175,60 +160,30 @@ class Connector:
         """
         row_t, col_t = node_t
         row_s, col_s = node_s
-        elevation_difference = self.elevation_difference_grids[(row_t-row_s, col_t-col_s)][row_t, col_t]
+        elevation1 = self.elevation_grid[row_t, col_t]
+        elevation2 = self.elevation_grid[row_s, col_s]
+        elevation_diff = max(0, elevation1 - elevation2)
         weight = self.weight_grid[row_t, col_t]
-        if elevation_difference > 0:
-            return max(weight*elevation_difference, elevation_difference)
-        return max(weight, 0)
+        # If the elevation difference is too large, then we don't want to use the edge at all,
+        # if the elevation is 0, then we will defer to how well the model did there,
+        # and in the final case, we scale the elevation_diff by weight if that increases the weight.
+        if elevation_diff > self.max_elevation_diff:
+            # The Idea is that our DEM isn't terrible, so water likely shouldn't gain too much elevation,
+            # we set that at 20 meters.
+            elevation_diff = 1e30
+        if elevation_diff == 0:
+            # The idea is that if we have a bunch of cells all with a zero elevation difference,
+            # then we should use whichever cells the model was most certain about
+            return max(weight, 0)
+        else:
+            # Similarly, we scale the elevation difference up where the model is less certain, but
+            # we never scale the elevation difference down. We don't scale the elevation difference down
+            # to avoid the graph from searching upstream along cells where the scaled model outputs are 1
+            # for a nearby connection
+            return max(weight * elevation_diff, elevation_diff)
 
-    # def get_weight(
-    #         self, node_t, node_s,
-    #         *args, **kwargs
-    # ):
-    #     """
-    #     Parameters
-    #     ----------
-    #     node_t: Tuple[int, int]
-    #         The coordinates of the target node.
-    #
-    #     node_s: Tuple[int, int]
-    #         The coordinates of the source node.
-    #
-    #     *args
-    #         Variable length positional arguments.
-    #
-    #     **kwargs
-    #         Variable length keyword arguments.
-    #
-    #     Returns
-    #     -------
-    #     float
-    #         The weight of the edge between the two nodes.
-    #
-    #     """
-    #     row_t, col_t = node_t
-    #     row_s, col_s = node_s
-    #     elevation1 = self.elevation_grid[row_t, col_t]
-    #     elevation2 = self.elevation_grid[row_s, col_s]
-    #     elevation_diff = max(0, elevation1 - elevation2)
-    #     weight = self.weight_grid[row_t, col_t]
-    #     # If the elevation difference is too large, then we don't want to use the edge at all,
-    #     # if the elevation is 0, then we will defer to how well the model did there,
-    #     # and in the final case, we scale the elevation_diff by weight if that increases the weight.
-    #     if elevation_diff > self.max_elevation_diff:
-    #         # The Idea is that our DEM isn't terrible, so water likely shouldn't gain too much elevation,
-    #         # we set that at 20 meters.
-    #         elevation_diff = 1e30
-    #     if elevation_diff == 0:
-    #         # The idea is that if we have a bunch of cells all with a zero elevation difference,
-    #         # then we should use whichever cells the model was most certain about
-    #         return max(weight, 0)
-    #     else:
-    #         # Similarly, we scale the elevation difference up where the model is less certain, but
-    #         # we never scale the elevation difference down. We don't scale the elevation difference down
-    #         # to avoid the graph from searching upstream along cells where the scaled model outputs are 1
-    #         # for a nearby connection
-    #         return max(weight * elevation_diff, elevation_diff)
+    def check_row_col(self, row, col):
+        return self.nodes_grid[row, col]
 
     def add_edges_to_graph(self, nodes_list=None):
         """
@@ -239,9 +194,9 @@ class Connector:
 
         """
         if nodes_list is None:
-            nodes_list = self.nodes
+            nodes_list = [(row, col) for row in range(self.num_rows) for col in range(self.num_cols)]
         indices = [-1, 0, 1]
         edges = [[(row, col), (row+i, col+j), self.get_weight((row, col), (row+i, col+j))]
                  for (row, col) in nodes_list for i in indices for j in indices
-                 if (row+i, col+j) in self.nodes and (i != 0 or j != 0)]
+                 if self.check_row_col(row, col) and self.check_row_col(row+i, col+j) and (i != 0 or j != 0)]
         self.graph.add_weighted_edges_from(edges)

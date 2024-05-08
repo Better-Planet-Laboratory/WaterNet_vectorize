@@ -55,6 +55,7 @@ cdef class ElevationHeap:
 
     cdef reset_free_index(self):
         self.free_index = 0
+        self.down_index = -1
 
     cdef npint get_elevation(self, npint row, npint col):
         if row >= 0 and col >= 0:
@@ -105,12 +106,18 @@ cdef class ElevationHeap:
                 self.heapify_down(next_index)
 
     cdef remove_top(self):
-        self.array[0, 0] = -1
-        self.array[0, 1] = -1
+        self.array[0, 0] = self.array[2, 0]
+        self.array[0, 1] = self.array[2, 1]
+        self.array[2, 0] = -1
+        self.array[2, 1] = -1
         self.heapify_down(0)
+        self.heapify_down(2)
 
     cdef add_element(self, npint row, npint col):
         if self.down_index < 0 or self.down_index > self.free_index:
+            if self.get_row_col_at_index(self.free_index)[0] >= 0:
+                print('issue adding element: ', self.free_index, self.down_index)
+                raise Exception
             self.add_row_col_at_index(row, col, self.free_index)
             if self.free_index > 0:
                 self.heapify_up(self.free_index)
@@ -119,6 +126,7 @@ cdef class ElevationHeap:
                 self.double_array()
         else:
             if self.get_row_col_at_index(self.down_index)[0] >= 0:
+                print('issue adding element: ', self.free_index, self.down_index)
                 raise Exception
             self.add_row_col_at_index(row, col, self.down_index)
             self.heapify_up(self.down_index)
@@ -157,32 +165,50 @@ cdef cnp.ndarray[npint, ndim=2] add_row_col_to_array(
 
 
 cdef npint8 get_counts(cnp.ndarray[npint8, ndim=2] local_grid):
+    """
+    This function takes in a 3x3 grid and calculates the sum of the values at
+    specific adjacent positions. The four adjacent positions considered are
+    (1, 0), (0, 1), (1, 2), and (2, 1). The sum is then returned as an int8 value.
+    """
     cdef npint8 dir_count = local_grid[1, 0] + local_grid[0, 1] + local_grid[1, 2] + local_grid[2, 1]
     return dir_count
 
 
-cdef bint check_plus_merge_point(cnp.ndarray[npint8, ndim=2] local_grid):
-    cdef npint8 merge_type_1 = local_grid[1, 0] + local_grid[2, 1] + local_grid[0, 2]
-    cdef npint8 merge_type_2 = local_grid[1, 0] + local_grid[0, 1] + local_grid[2, 2]
-    cdef npint8 merge_type_3 = local_grid[0, 1] + local_grid[1, 2] + local_grid[2, 0]
-    cdef npint8 merge_type_4 = local_grid[1, 2] + local_grid[2, 1] + local_grid[0, 0]
-    if merge_type_1 == 3 or merge_type_2 == 3 or merge_type_3 == 3 or merge_type_4 == 3:
+cdef bint is_merge_type_1(cnp.ndarray[npint8, ndim=2] local_grid):
+    """
+    Merge type 1 are the rotations of:
+    |X| | |
+    | |X|X|
+    | |X| |
+    """
+    cdef npint8 merge_type_11 = local_grid[1, 0] + local_grid[2, 1] + local_grid[0, 2]
+    cdef npint8 merge_type_12 = local_grid[1, 0] + local_grid[0, 1] + local_grid[2, 2]
+    cdef npint8 merge_type_13 = local_grid[0, 1] + local_grid[1, 2] + local_grid[2, 0]
+    cdef npint8 merge_type_14 = local_grid[1, 2] + local_grid[2, 1] + local_grid[0, 0]
+    if merge_type_11 == 3 or merge_type_12 == 3 or merge_type_13 == 3 or merge_type_14 == 3:
         return True
     return False
 
 
-cdef bint check_cross_merge_point(cnp.ndarray[npint8, ndim=2] local_grid):
-    cdef npint8 sum1 = local_grid[2, 0] + local_grid[2, 1] + local_grid[2, 2]
-    cdef npint8 sum2 = local_grid[0, 2] + local_grid[1, 2] + local_grid[2, 2]
-    cdef npint8 sum3 = local_grid[0, 0] + local_grid[0, 1] + local_grid[0, 2]
-    cdef npint8 sum4 = local_grid[0, 0] + local_grid[1, 0] + local_grid[2, 0]
+cdef bint is_merge_type_2(cnp.ndarray[npint8, ndim=2] local_grid):
+    """
+    Merge type 2 are the rotations of:
+    | |X| |
+    | |X| |
+    |Z| |Z|
+    Where at least 1 Z is a waterway
+    """
+    cdef npint8 sum1 = local_grid[2, 0] + local_grid[2, 2]
+    cdef npint8 sum2 = local_grid[0, 2] + local_grid[2, 2]
+    cdef npint8 sum3 = local_grid[0, 0] + local_grid[0, 2]
+    cdef npint8 sum4 = local_grid[0, 0] + local_grid[2, 0]
 
-    cdef bint merge_type_1 = local_grid[0, 1] == 1 and sum1 >= 1
-    cdef bint merge_type_2 = local_grid[1, 0] == 1 and sum2 >= 1
-    cdef bint merge_type_3 = local_grid[2, 1] == 1 and sum3 >= 1
-    cdef bint merge_type_4 = local_grid[1, 2] == 1 and sum4 >= 1
+    cdef bint merge_type_21 = local_grid[0, 1] == 1 and sum1 >= 1
+    cdef bint merge_type_22 = local_grid[1, 0] == 1 and sum2 >= 1
+    cdef bint merge_type_23 = local_grid[2, 1] == 1 and sum3 >= 1
+    cdef bint merge_type_24 = local_grid[1, 2] == 1 and sum4 >= 1
 
-    if merge_type_1 or merge_type_2 or merge_type_3 or merge_type_4:
+    if merge_type_21 or merge_type_22 or merge_type_23 or merge_type_24:
         return True
     return False
 
@@ -242,26 +268,30 @@ cdef label_points(
     cdef npint8 dir_count
     for index in range(num_remaining):
         row, col = points_list[index]
+        # 3x3 grid centered at row, col
         local_grid = grid[row - 1:row + 2, col - 1:col + 2]
         dir_count = get_counts(local_grid)
         if dir_count == 4:
+            # If there is water in all 4 directions, (row, col) is currently an interior point
             interior_grid[row, col] = 1
         elif dir_count == 3:
+            # If there is water in 1 of 3 
             elevation_heap.add_element(row, col)
             interior_grid[row, col] = 0
         elif dir_count == 2:
             interior_grid[row, col] = 0
             if local_grid[1, 0] + local_grid[1, 2] != 2 and local_grid[0, 1] + local_grid[2, 1] != 2:
-                if not check_plus_merge_point(local_grid):
+                # If not straight across, check if it is a merge point
+                if not is_merge_type_1(local_grid):
                     elevation_heap.add_element(row, col)
         elif dir_count == 1:
             interior_grid[row, col] = 0
             if local_grid[0, 0] + local_grid[0, 2] + local_grid[2, 0] + local_grid[2, 2] != 0:
                 if init_label:
-                    if not check_cross_merge_point(local_grid) and not check_1_dir_start_points(local_grid):
+                    if not is_merge_type_2(local_grid) and not check_1_dir_start_points(local_grid):
                         elevation_heap.add_element(row, col)
                 else:
-                    if not check_cross_merge_point(local_grid):
+                    if not is_merge_type_2(local_grid):
                         elevation_heap.add_element(row, col)
     return elevation_heap, interior_grid
 
@@ -289,16 +319,22 @@ cdef evaluate_simple(list points_list,
     cdef int index
     cdef cnp.ndarray[npint8, ndim=2] local_grid
     cdef cnp.ndarray[npint8, ndim=2] interior_grid = grid.copy()
-    interior_grid[interior_grid == 2]  = 0
+    cdef cnp.ndarray[npint, ndim=2] itergrid = np.zeros(
+        shape=(interior_grid.shape[0], interior_grid.shape[1]), dtype=np.int32
+    )
+    interior_grid[interior_grid == 2] = 0
     grid[grid == 2] = 1
     cdef int simple_index = 0
     cdef npint8 dir_count
     # np.random.shuffle(points_list)
-    elevation_heap, interior_grid = label_points(points_list, grid, interior_grid, True, elevation_heap)
+    elevation_heap, interior_grid = label_points(points_list, grid, interior_grid, False, elevation_heap)
     cdef int count = 0
+    cdef int itercount = 0
     if len(elevation_heap.array) > 0:
         row, col = elevation_heap.get_row_col_at_index(0)
         while row >= 0:
+            count = 0
+            itercount += 1
             points_list = []
             while row >= 0:
                 count += 1
@@ -307,25 +343,31 @@ cdef evaluate_simple(list points_list,
                 dir_count = get_counts(local_grid)
                 if dir_count == 3:
                     grid[row, col] = 0
+                    itergrid[row, col] = itercount
                 elif dir_count == 2:
                     if local_grid[1, 0] + local_grid[1, 2] != 2 and local_grid[0, 1] + local_grid[2, 1] != 2:
-                        if not check_plus_merge_point(local_grid):
+                        if not is_merge_type_1(local_grid):
                             grid[row, col] = 0
+                            itergrid[row, col] = itercount
                 elif dir_count == 1:
                     if local_grid[0, 0] + local_grid[0, 2] + local_grid[2, 0] + local_grid[2, 2] != 0:
-                        if not check_cross_merge_point(local_grid):
+                        if not is_merge_type_2(local_grid):
                             grid[row, col] = 0
+                            itergrid[row, col] = itercount
                 elevation_heap.remove_top()
                 row, col = elevation_heap.get_row_col_at_index(0)
             elevation_heap.reset_free_index()
-            elevation_heap, interior_grid = label_points(points_list, grid, interior_grid, False, elevation_heap)
+            elevation_heap, interior_grid = label_points(
+                points_list, grid, interior_grid, False, elevation_heap
+            )
             row, col = elevation_heap.get_row_col_at_index(0)
-    return grid
+    return grid, itergrid
 
 
 def thinner(cnp.ndarray[npint8, ndim=2] grid, cnp.ndarray[npint16, ndim=2] elevation_grid):
     grid = embed_in_larger_grid8(grid)
     elevation_grid = embed_in_larger_grid16(elevation_grid)
+    itergrid = grid.copy()
     points_list = []
     cdef npint row
     cdef npint col
@@ -335,8 +377,8 @@ def thinner(cnp.ndarray[npint8, ndim=2] grid, cnp.ndarray[npint16, ndim=2] eleva
         if dir_count < 4:
             points_list.append((row, col))
     if len(points_list) > 1:
-        heap_array = np.zeros((len(points_list), 2), dtype=np.int32) - 1
+        heap_array = np.zeros((max(len(points_list), 3), 2), dtype=np.int32) - 1
         heap = ElevationHeap(array=heap_array, elevation_grid=elevation_grid)
-        grid = evaluate_simple(points_list, grid, heap)
-    return grid[1:-1, 1:-1]
+        grid, itergrid = evaluate_simple(points_list, grid, heap)
+    return grid[1:-1, 1:-1], itergrid[1:-1, 1:-1]
 
