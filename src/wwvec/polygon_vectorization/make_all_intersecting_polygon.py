@@ -9,6 +9,7 @@ import pandas as pd
 import warnings
 import os
 import time
+from pathlib import Path
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -26,8 +27,9 @@ def merge_dfs(input_list: list) -> gpd.GeoDataFrame:
         A merged DataFrame containing the data from the specified paths.
     """
     paths = [BasinPaths(hydro2_id=val['hydro2_id'], stream_id=val['stream_id']).save_path for val in input_list]
-    merged_df = pd.concat([gpd.read_parquet(path) for path in paths if path.exists()], ignore_index=True)
-    return merged_df
+    if len(paths) > 0:
+        merged_df = pd.concat([gpd.read_parquet(path) for path in paths if path.exists()], ignore_index=True)
+        return merged_df
 
 
 def save_exception_waterway(
@@ -57,19 +59,20 @@ def run_for_basin_list(input_list):
         try:
             run_for_basin(**inputs)
         except IndexError:
-            x, y = inputs['basin_geometry'].centroid
+            x, y = inputs['basin_geometry'].centroid.coords[0]
             print('Index Error, likely no waterway or elevation data at this basin.')
             print(f'Stream ID: {inputs["stream_id"]}, Centroid: {x}, {y}')
             save_exception_waterway(**inputs)
         except:
-            x, y = inputs['basin_geometry'].centroid
+            x, y = inputs['basin_geometry'].centroid.coords[0]
             print('Unexplained Error, investigate further.')
             print(f'Stream ID: {inputs["stream_id"]}, Centroid: {x}, {y}')
-            save_exception_waterway(**inputs)
+        #     save_exception_waterway(**inputs)
     time.sleep(.1)
     temp_df = merge_dfs(input_list)
-    temp_path = ppaths.merged_temp/f'temp_{os.getpid()}.parquet'
-    temp_df.to_parquet(temp_path)
+    if temp_df is not None:
+        temp_path = ppaths.merged_temp/f'temp_{os.getpid()}.parquet'
+        temp_df.to_parquet(temp_path)
 
 
 def open_hydro2_id_tdx_data(hydro2_id, polygon=None):
@@ -95,12 +98,14 @@ def open_hydro2_id_tdx_data(hydro2_id, polygon=None):
     - The resulting GeoDataFrame contains the joined data with an added 'basin' field representing the basin geometry.
 
     """
+    print('Opening Streams')
     all_streams = gpd.read_file(
         ppaths.get_tdx_stream_network_file(hydro2_id), mask=polygon,
         include_fields=['LINKNO', 'strmOrder', 'DSLINKNO', 'USLINKNO1', 'USLINKNO2', 'geometry']
     )
     all_streams = all_streams[all_streams.length > 0]
     all_streams = all_streams.reset_index(drop=True)
+    print('Opening Basins')
     all_basins = gpd.read_file(
         ppaths.get_tdx_basin_file(hydro2_id), mask=polygon, include_fields=['streamID', 'geometry']
     ).reset_index(drop=True)
@@ -165,8 +170,9 @@ def make_basin_list_input_data(
             continue
     return input_list
 
+
 def make_all_intersecting_polygon(
-        polygon: shapely.Polygon, save_path, overwrite=False, num_proc=30
+        polygon: shapely.Polygon, save_path: Path, overwrite=False, num_proc=30
 ):
     """
     Makes all of the basins intersecting the input polygon, then merges that data.
@@ -176,7 +182,7 @@ def make_all_intersecting_polygon(
     polygon : shapely.Polygon
         The polygon used for masking the hydrobasins data.
 
-    save_path : str
+    save_path : Path
         The path where the final merged and fixed dataframe will be saved in Parquet format.
 
     overwrite : bool, optional
@@ -213,7 +219,7 @@ def make_all_intersecting_polygon(
     return fixed_df
 
 
-def make_all_intersecting_hydrobasin_level_2_polygon(hydrobasin_id: int, save_path, overwrite=False, num_proc=30):
+def make_all_intersecting_hydrobasin_level_2_polygon(hydrobasin_id: int, save_path: Path, overwrite=False, num_proc=30):
     """
     Makes all of the basins in the input hydrobasin level 2 id, then merges that data.
 
@@ -221,7 +227,7 @@ def make_all_intersecting_hydrobasin_level_2_polygon(hydrobasin_id: int, save_pa
     ----------
     hydrobasin_id : int
         The ID of the hydrobasin.
-    save_path : str
+    save_path : Path
         The path to save the polygon data.
     overwrite : bool, optional
         Whether to overwrite existing data at the save path. Default is False.
@@ -268,15 +274,15 @@ if __name__ == "__main__":
     # countries = ['ethiopia', 'zambia', 'tanzania', 'kenya']
 
     # countries = ['equatorial_guinea']
-    countries = ['rwanda']
-    from water.basic_functions import get_country_polygon
-    save_dir = ppaths.data/'africa_basins_countries'
-    save_dir.mkdir(exist_ok=True)
-    for ctry in countries:
-        ctry_parquet_path = save_dir/f'{ctry}_waterways_new.parquet'
-        polygon = get_country_polygon(ctry)
-        gdf = make_all_intersecting_polygon(polygon=polygon, save_path=ctry_parquet_path, overwrite=False, num_proc=20)
-        # ctry_gpkg_path = ppaths.data/f'africa_basins_countries/{ctry}_waterways.gpkg'
+    # countries = ['rwanda']
+    # from water.basic_functions import get_country_polygon
+    # save_dir = ppaths.data/'africa_basins_countries'
+    # save_dir.mkdir(exist_ok=True)
+    # for ctry in countries:
+    #     ctry_parquet_path = save_dir/f'{ctry}_waterways_new.parquet'
+    #     polygon = get_country_polygon(ctry)
+    #     gdf = make_all_intersecting_polygon(polygon=polygon, save_path=ctry_parquet_path, overwrite=False, num_proc=20)
+    #     # ctry_gpkg_path = ppaths.data/f'africa_basins_countries/{ctry}_waterways.gpkg'
         # gdf = gpd.read_parquet(ctry_parquet_path)
     # ctry = countries[0]
     # gdf = gpd.read_parquet(ppaths.data/f'africa_basins_countries/{ctry}_waterways_new.parquet')
@@ -286,39 +292,42 @@ if __name__ == "__main__":
     #     print('')
         # gdf.to_file(ctry_gpkg_path, driver='GPKG')
     # countries = ['uganda']
-    # countries = ['ethiopia', 'zambia', 'tanzania', 'kenya', 'rwanda', 'ivory_coast', 'uganda']
+    import pandas as pd
+    pd.options.display.float_format = '{:,.0f}'.format
+    countries = ['ethiopia', 'zambia', 'tanzania', 'kenya', 'rwanda', 'ivory_coast', 'uganda']
     # countries = ['rwanda', 'uganda']
 
     #
-    # from pyproj import Geod
-    # import warnings
-    # warnings.filterwarnings(category=UserWarning, action='ignore')
-    # geod = Geod(ellps='WGS84')
-    # dfs = []
-    # waterbodies = gpd.read_file(ppaths.data / 'waterbodies_africa.zip')
-    # waterbodies_array = waterbodies.geometry.to_list()
-    # for ctry in countries:
-    #     print(f'opening {ctry} data')
-    #     gdf = gpd.read_parquet(ppaths.data/f'africa_basins_countries/{ctry}_waterways_new.parquet')
-    #     print(len(gdf))
-    #     gdf_tree = shapely.STRtree(gdf.geometry.to_numpy())
-    #     water_inds, tree_inds = gdf_tree.query(waterbodies_array, 'intersects')
-    #     unique_gdf_inds = set(np.unique(tree_inds))
-    #     keep_gdf_inds = [ind for ind in gdf.index if ind not in unique_gdf_inds]
-    #     gdf = gdf.loc[keep_gdf_inds].reset_index(drop=True)
-    #     print(len(gdf))
-    #
-    #     gdf['country'] = ctry
-    #     s = tt()
-    #     geom_length = np.frompyfunc(lambda x: geod.geometry_length(x), nin=1, nout=1)
-    #     gdf['length'] = geom_length(gdf.geometry.to_numpy())
-    #     print(gdf.groupby(['from_tdx', 'stream_order'])['length'].sum()/1000)
-    #     print('')
-    #     dfs.append(gdf)
-    # df = pd.concat(dfs, ignore_index=True)
-    # df1 = df.groupby(['country', 'from_tdx', 'stream_order'])[['length']].sum()/1000
-    # df2 = df.groupby(['country', 'from_tdx'])[['length']].sum()/1000
-    # df3 = df.groupby(['country'])[['length']].sum()/1000
+    from pyproj import Geod
+    import warnings
+    warnings.filterwarnings(category=UserWarning, action='ignore')
+    geod = Geod(ellps='WGS84')
+    dfs = []
+    waterbodies = gpd.read_file(ppaths.data / 'waterbodies_africa.zip')
+    waterbodies_array = waterbodies.geometry.to_list()
+    for ctry in countries:
+        print(f'opening {ctry} data')
+        gdf = gpd.read_parquet(ppaths.data/f'africa_basins_countries/{ctry}_waterways_new.parquet')
+        print(len(gdf))
+        gdf_tree = shapely.STRtree(gdf.geometry.to_numpy())
+        water_inds, tree_inds = gdf_tree.query(waterbodies_array, 'intersects')
+        unique_gdf_inds = set(np.unique(tree_inds))
+        keep_gdf_inds = [ind for ind in gdf.index if ind not in unique_gdf_inds]
+        gdf = gdf.loc[keep_gdf_inds].reset_index(drop=True)
+        print(len(gdf))
+
+        gdf['country'] = ctry
+        s = tt()
+        geom_length_km = np.frompyfunc(lambda x: geod.geometry_length(x)/1000, nin=1, nout=1)
+        gdf['length_km'] = geom_length_km(gdf.geometry.to_numpy())
+        print(gdf.groupby(['from_tdx'])['length_km'].sum())
+        print(gdf.groupby(['from_tdx', 'stream_order'])['length_km'].sum())
+        print('')
+        dfs.append(gdf)
+    df = pd.concat(dfs, ignore_index=True)
+    df1 = df.groupby(['country', 'from_tdx', 'stream_order'])[['length_km']].sum()
+    df2 = df.groupby(['country', 'from_tdx'])[['length_km']].sum()
+    df3 = df.groupby(['country'])[['length_km']].sum()
 
     # africa_basins = gpd.read_file(ppaths.data/'basins/hybas_af_lev01-12_v1c/hybas_af_lev02_v1c.shp')
     # from multiprocessing import Process
