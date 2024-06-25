@@ -27,7 +27,7 @@ if __name__ == "__main__":
     from water.basic_functions import get_country_polygon, printdf, tt, time_elapsed
     from pyproj import Geod
     from pathlib import Path
-    usa_states = gpd.read_parquet(ppaths.country_lookup_data/'usa_states.parquet')
+    # usa_states = gpd.read_parquet(ppaths.country_lookup_data/'usa_states.parquet')
     hu4_hulls = gpd.read_parquet(Path('/ilus/data/waterway_data/hu4_hulls.parquet'))
 
     # printdf(usa_states)
@@ -37,7 +37,7 @@ if __name__ == "__main__":
 
     save_dir = Path('/ilus/data/waterway_data/hu4_model')
     save_dir.mkdir(exist_ok=True)
-    for name, polygon in zip(usa_states.hu4_index, usa_states.geometry):
+    for name, polygon in zip(hu4_hulls.hu4_index, hu4_hulls.geometry):
         ctry_parquet_path = save_dir/f'hu4_{name}_model.parquet'
         # polygon = get_country_polygon(ctry)
         if not ctry_parquet_path.exists() and name != 'Hawaii':

@@ -195,13 +195,16 @@ class SharedMemoryPool:
                     self.previous_completed = ten_percent
 
     def run(self):
-        while True:
-            while self.has_available_processors() and self.has_more_inputs() and not self.has_memory_issues():
-                self.add_new_process()
-            self.check_for_completed_processes_and_timeouts()
-            self.fix_memory_usage()
-            self.print_progress()
-            if len(self.process_dict) == 0 and self.current_input_index >= len(self.input_list):
-                break
-            if len(self.process_dict) == self.num_proc or self.has_memory_issues():
-                sleep(self.sleep_time)
+        try:
+            while True:
+                while self.has_available_processors() and self.has_more_inputs() and not self.has_memory_issues():
+                    self.add_new_process()
+                self.check_for_completed_processes_and_timeouts()
+                self.fix_memory_usage()
+                self.print_progress()
+                if len(self.process_dict) == 0 and self.current_input_index >= len(self.input_list):
+                    break
+                if len(self.process_dict) == self.num_proc or self.has_memory_issues():
+                    sleep(self.sleep_time)
+        except:
+            self.terminate_all()

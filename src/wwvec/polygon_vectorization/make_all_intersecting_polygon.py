@@ -248,7 +248,7 @@ def make_all_intersecting_hydrobasin_level_2_polygon(hydrobasin_id: int, save_pa
     )
     time_elapsed(s, 2)
     np.random.shuffle(inputs_list)
-    input_chunks = np.array_split(inputs_list, max(len(inputs_list)//500, 4*num_proc))
+    input_chunks = np.array_split(inputs_list, max(len(inputs_list)//500, min(4*num_proc, len(inputs_list))))
     time_elapsed(s, 2)
     print(f"Making vectorized waterways, number of inputs {len(inputs_list)}")
     SharedMemoryPool(
@@ -265,104 +265,3 @@ def make_all_intersecting_hydrobasin_level_2_polygon(hydrobasin_id: int, save_pa
     time_elapsed(s, 2)
     fixed_df.to_parquet(save_path)
     return merged_df
-
-
-if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-    # ctry = 'rwanda'
-    # countries = ['rwanda', 'ivory_coast', 'uganda', 'ethiopia', 'zambia', 'tanzania', 'kenya']
-    # countries = ['ethiopia', 'zambia', 'tanzania', 'kenya']
-
-    # countries = ['equatorial_guinea']
-    # countries = ['rwanda']
-    # from water.basic_functions import get_country_polygon
-    # save_dir = ppaths.data/'africa_basins_countries'
-    # save_dir.mkdir(exist_ok=True)
-    # for ctry in countries:
-    #     ctry_parquet_path = save_dir/f'{ctry}_waterways_new.parquet'
-    #     polygon = get_country_polygon(ctry)
-    #     gdf = make_all_intersecting_polygon(polygon=polygon, save_path=ctry_parquet_path, overwrite=False, num_proc=20)
-    #     # ctry_gpkg_path = ppaths.data/f'africa_basins_countries/{ctry}_waterways.gpkg'
-        # gdf = gpd.read_parquet(ctry_parquet_path)
-    # ctry = countries[0]
-    # gdf = gpd.read_parquet(ppaths.data/f'africa_basins_countries/{ctry}_waterways_new.parquet')
-    # for file in ppaths.tdx_streams.glob("*.gpkg"):
-    #     print(file.name)
-    #     print(gpd.read_file(file, rows=1).columns)
-    #     print('')
-        # gdf.to_file(ctry_gpkg_path, driver='GPKG')
-    # countries = ['uganda']
-    import pandas as pd
-    pd.options.display.float_format = '{:,.0f}'.format
-    countries = ['ethiopia', 'zambia', 'tanzania', 'kenya', 'rwanda', 'ivory_coast', 'uganda']
-    # countries = ['rwanda', 'uganda']
-
-    #
-    from pyproj import Geod
-    import warnings
-    warnings.filterwarnings(category=UserWarning, action='ignore')
-    geod = Geod(ellps='WGS84')
-    dfs = []
-    waterbodies = gpd.read_file(ppaths.data / 'waterbodies_africa.zip')
-    waterbodies_array = waterbodies.geometry.to_list()
-    for ctry in countries:
-        print(f'opening {ctry} data')
-        gdf = gpd.read_parquet(ppaths.data/f'africa_basins_countries/{ctry}_waterways_new.parquet')
-        print(len(gdf))
-        gdf_tree = shapely.STRtree(gdf.geometry.to_numpy())
-        water_inds, tree_inds = gdf_tree.query(waterbodies_array, 'intersects')
-        unique_gdf_inds = set(np.unique(tree_inds))
-        keep_gdf_inds = [ind for ind in gdf.index if ind not in unique_gdf_inds]
-        gdf = gdf.loc[keep_gdf_inds].reset_index(drop=True)
-        print(len(gdf))
-
-        gdf['country'] = ctry
-        s = tt()
-        geom_length_km = np.frompyfunc(lambda x: geod.geometry_length(x)/1000, nin=1, nout=1)
-        gdf['length_km'] = geom_length_km(gdf.geometry.to_numpy())
-        print(gdf.groupby(['from_tdx'])['length_km'].sum())
-        print(gdf.groupby(['from_tdx', 'stream_order'])['length_km'].sum())
-        print('')
-        dfs.append(gdf)
-    df = pd.concat(dfs, ignore_index=True)
-    df1 = df.groupby(['country', 'from_tdx', 'stream_order'])[['length_km']].sum()
-    df2 = df.groupby(['country', 'from_tdx'])[['length_km']].sum()
-    df3 = df.groupby(['country'])[['length_km']].sum()
-
-    # africa_basins = gpd.read_file(ppaths.data/'basins/hybas_af_lev01-12_v1c/hybas_af_lev02_v1c.shp')
-    # from multiprocessing import Process
-    # world_basins = gpd.read_parquet(ppaths.data/'basins/hybas_all_level_2.parquet')
-    # st = tt()
-    # for ind, (id, poly) in enumerate(zip(world_basins.HYBAS_ID, world_basins.geometry)):
-    #     s = tt()
-    #     print(f'Working on {id} ({ind+1}/{len(world_basins)})')
-    #     poly = poly.buffer(-.00001)
-    #     save_path = ppaths.data/f'basins_level_2/{id}_waterways.parquet'
-    #     if not save_path.exists():
-            # p = Process(
-            #     target=make_all_intersecting_polygon,
-            #     kwargs=dict(polygon=poly, save_path=save_path, num_proc=28, overwrite=False)
-            # )
-            # p.start()
-            # p.join()
-            # p.close()
-            # break
-            # make_all_intersecting_polygon(polygon=poly, save_path=save_path, num_proc=20, overwrite=False)
-    #         make_all_intersecting_hydrobasin_level_2_polygon(id, save_path, overwrite=False)
-    #     time_elapsed(s, 2)
-    # time_elapsed(st, 2)
-
-    #
-    # countries = ['uganda']
-    # from pathlib import Path
-    # for file in (ppaths.data/f'africa_basins_level_2').iterdir():
-    #     gdf = gpd.read_parquet(file)
-    #     save_path = Path(str(file).replace('.parquet', '.gpkg'))
-    #     gdf.to_file(save_path, driver='GPKG')
-    #
-    #
-    # for ctry in countries:
-    #     ctry_parquet_path = ppaths.data/f'africa_basins_countries/{ctry}_waterways.parquet'
-    #     ctry_gpkg_path = ppaths.data/f'africa_basins_countries/{ctry}_waterways.gpkg'
-    #     gdf = gpd.read_parquet(ctry_parquet_path)
-    #     gdf.to_file(ctry_gpkg_path, driver='GPKG')
