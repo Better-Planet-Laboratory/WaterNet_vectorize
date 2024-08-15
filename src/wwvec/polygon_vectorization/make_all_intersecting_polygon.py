@@ -27,8 +27,18 @@ def merge_dfs(input_list: list) -> gpd.GeoDataFrame:
         A merged DataFrame containing the data from the specified paths.
     """
     paths = [BasinPaths(hydro2_id=val['hydro2_id'], stream_id=val['stream_id']).save_path for val in input_list]
+    dfs_to_merge = []
+    for path in paths:
+        if path.exists():
+            try:
+                dfs_to_merge.append(gpd.read_parquet(path))
+            except Exception as e:
+                print(e)
+                print(f'Issue with {path}')
+                continue
+
     if len(paths) > 0:
-        merged_df = pd.concat([gpd.read_parquet(path) for path in paths if path.exists()], ignore_index=True)
+        merged_df = pd.concat(dfs_to_merge, ignore_index=True)
         return merged_df
 
 

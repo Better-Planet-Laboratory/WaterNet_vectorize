@@ -22,38 +22,45 @@ if __name__ == "__main__":
     # #
     # # # countries = ['equatorial_guinea']
     # # # countries = ['egypt']
-    countries = ['rwanda']
+    # countries = ['rwanda']
 
     from water.basic_functions import get_country_polygon, printdf, tt, time_elapsed
     from pyproj import Geod
     from pathlib import Path
-    # usa_states = gpd.read_parquet(ppaths.country_lookup_data/'usa_states.parquet')
-    hu4_hulls = gpd.read_parquet(Path('/ilus/data/waterway_data/hu4_hulls.parquet'))
-
+    # country_boundaries = gpd.read_file(
+    #     ppaths.data/'natural_earth_country_boundaries.zip', include_fields=['NAME', 'CONTINENT', 'ISO_A3', 'geometry']
+    # )
+    country_boundaries = gpd.read_file(
+        ppaths.data/'natural_earth_country_boundaries.zip'
+    )
     # printdf(usa_states)
-    # geod = Geod(ellps='WGS84')
+    geod = Geod(ellps='WGS84')
     # save_dir = ppaths.data/'usa_states_waterways'
 
-
-    save_dir = Path('/ilus/data/waterway_data/hu4_model')
-    save_dir.mkdir(exist_ok=True)
-    for name, polygon in zip(hu4_hulls.hu4_index, hu4_hulls.geometry):
-        ctry_parquet_path = save_dir/f'hu4_{name}_model.parquet'
-        # polygon = get_country_polygon(ctry)
-        if not ctry_parquet_path.exists() and name != 'Hawaii':
-            print(f'Working on {name}')
-            gdf = make_all_intersecting_polygon(
-                polygon=polygon, save_path=ctry_parquet_path, overwrite=False, num_proc=28
-            )
-            print('\n')
+    # printdf(country_boundaries, 300)
+    # save_dir = ppaths.data/'country_waterways'
+    # save_dir.mkdir(exist_ok=True)
+    # for ind, (name, polygon) in enumerate(zip(country_boundaries.ADM0_A3, country_boundaries.geometry)):
+    #     ctry_parquet_path = save_dir/f'{name}_model_waterways.parquet'
+    #     # polygon = get_country_polygon(ctry)
+    #     if not ctry_parquet_path.exists():
+    #         print(f'Working on {name} ({ind + 1}/{len(country_boundaries)})')
+    #         try:
+    #             gdf = make_all_intersecting_polygon(
+    #                 polygon=polygon, save_path=ctry_parquet_path, overwrite=False, num_proc=20
+    #             )
+    #         except Exception as e:
+    #             print(e)
+    #             print(f'Issue making {name}')
+    #         print('\n')
         # gdf = gpd.read_parquet(ctry_parquet_path)
-        # print(ctry)
-        # # printdf(gdf)
-        # gdf['length_km'] = gdf['geometry'].apply(geod.geometry_length)/1000
+        # gdf['length'] = gdf['geometry'].apply(geod.geometry_length)/1000
         # printdf(gdf.groupby(['from_tdx'])[['length_km']].sum())
         # print('')
         # printdf(gdf.groupby(['from_tdx', 'stream_order'])[['length_km']].sum(), 100)
         # print('\n'*2)
+
+
     # basin_dir = ppaths.data/'basins_level_2'
     # basin_dir_with_len = basin_dir/'basins_level_2_with_length'
     # basin_dir_with_len.mkdir(exist_ok=True)
