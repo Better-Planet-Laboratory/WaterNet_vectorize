@@ -1,0 +1,25 @@
+# To set custom paths, make a copy of this file titled "path_configurations.yaml" in the configuration_files directory.
+# Uncomment whichever path you would like to set as custom, and put the absolute path to the directory/ file you would
+# like to use.
+
+directories:
+  # If no entries are changed, then the program will look for a directory of the same name in the data directory
+  # data: # the base data directory. If not changed, this will be current_working_directory/data
+  # country_lookup_data:
+  # elevation_grids: # should have every elevation tif file you want to use
+  # waterway_grids: # should have every model output tif file you want to use
+  # tdx_streams: # should have every tdx stream geopackage file you want to use
+  # tdx_basins: $ should have every tdx basin geopackage file you want to use
+  # vectorized: # a directory where the vectorized model outputs will be saved, the outputs will be saved in subdirectories corresponding to whichever hydrobasins level 2 basin they fall in.
+  # merged_temp: # where you want your temporary dataframes saved when generating a larger polygon.
+  # merged_polygons: #where you want your merged polygons saved.
+
+files:
+#  hydrobasins: # The path to the hydrobasins_level2.geojson file (can be obtained from https://earth-info.nga.mil/)
+
+file_names:
+#  hydroidrpl will be replaced during a function call, so anything put here should have hydroidrpl in it,
+#  below are the filenames if you have downloaded the data from the NGA website without changing anything
+  tdx_stream_network: TDX_streamnet_hydroidrpl_01.gpkg
+  tdx_basins: TDX_streamreach_basins_hydroidrpl_01.gpkg
+
