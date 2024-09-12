@@ -185,7 +185,7 @@ def make_all_intersecting_polygon(
         polygon: shapely.Polygon, save_path: Path, overwrite=False, num_proc=30
 ):
     """
-    Makes all of the basins intersecting the input polygon, then merges that data.
+    Makes all of the TDX-Hydro basins intersecting the input polygon, then merges that data.
 
     Parameters
     ----------
@@ -231,7 +231,7 @@ def make_all_intersecting_polygon(
 
 def make_all_intersecting_hydrobasin_level_2_polygon(hydrobasin_id: int, save_path: Path, overwrite=False, num_proc=30):
     """
-    Makes all of the basins in the input hydrobasin level 2 id, then merges that data.
+    Makes all of the TDX-Hydro basins that intersect the input hydrobasin level 2 id, then merges that data.
 
     Parameters
     ----------
