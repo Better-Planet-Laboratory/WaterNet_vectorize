@@ -160,12 +160,3 @@ def make_bbox_raster(
     file_paths = get_file_paths_intersecting_bbox(bbox, base_dir=base_dir)
     raster = cut_and_merge_files(file_paths, bbox)
     return raster
-
-
-if __name__ == '__main__':
-    # x, y = -162.34942503417992, 68.59222928209014
-    # bbox = (x - .001, y - .001, x + .001, y + .001)
-    bbox = (-157.39161215142718, 70.67360831541608, -157.30027493866345, 70.74238630903194)
-    from wwvec.paths import ppaths
-    based = ppaths.data/'model_outputs_zoom_level_6'
-    raster = make_bbox_raster(bbox=bbox, base_dir=based)
