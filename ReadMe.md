@@ -1,5 +1,9 @@
 Used to vectorize WaterNet outputs.
 
+# Overview
+
+# Data Requirements
+
 To use this module, it is assumed that you have raster probability grids for waterways locations (EG WaterNet outputs),
 that you have the necessary TDX-Hydro data (The waterway networks and basins should be stored in different directories),
 hydrobasins level 2 geojson file, and that you have the necessary elevation data.
@@ -12,6 +16,8 @@ and bicubically upsampled COP-DEM-GLO-90 for Armenia and Azerbaijan.
 
 A copy of the path_configuration_template.yaml file should be made and saved as path_configuration.yaml in the
 configuration_files directory.
+
+# Key Functions
 
 The two important functions in this module are 
 
@@ -65,3 +71,9 @@ def make_all_intersecting_hydrobasin_level_2_polygon(hydrobasin_id: int, save_pa
         The merged dataframe containing the intersecting hydrobasin level 2 polygons.
     """
 ```
+
+# Related Repositories
+
+[WaterNet](https://github.com/Better-Planet-Laboratory/waterways_training_and_evaluation)
+
+[WaterNet Training and Evaluation](https://github.com/Better-Planet-Laboratory/WaterNet)
