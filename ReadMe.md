@@ -17,6 +17,10 @@ and bicubically upsampled COP-DEM-GLO-90 for Armenia and Azerbaijan.
 A copy of the path_configuration_template.yaml file should be made and saved as path_configuration.yaml in the
 configuration_files directory.
 
+
+# Installation
+
+
 # Key Functions
 
 The two important functions in this module are 
@@ -74,6 +78,5 @@ def make_all_intersecting_hydrobasin_level_2_polygon(hydrobasin_id: int, save_pa
 
 # Related Repositories
 
-[WaterNet](https://github.com/Better-Planet-Laboratory/waterways_training_and_evaluation)
-
-[WaterNet Training and Evaluation](https://github.com/Better-Planet-Laboratory/WaterNet)
+ * [WaterNet](https://github.com/Better-Planet-Laboratory/waterways_training_and_evaluation)
+ * [WaterNet Training and Evaluation](https://github.com/Better-Planet-Laboratory/WaterNet)
