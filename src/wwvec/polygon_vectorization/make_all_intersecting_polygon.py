@@ -14,7 +14,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
-def merge_dfs(input_list: list) -> gpd.GeoDataFrame:
+def _merge_dfs(input_list: list) -> gpd.GeoDataFrame:
     """
     Parameters
     ----------
@@ -42,7 +42,7 @@ def merge_dfs(input_list: list) -> gpd.GeoDataFrame:
         return merged_df
 
 
-def save_exception_waterway(
+def _save_exception_waterway(
         stream_id: int, hydro2_id: int, old_stream_order: int, old_target_id: int,
         old_source_ids: list[int], stream_geometry: shapely.LineString, overwrite: bool, **kwargs
 ):
@@ -60,7 +60,7 @@ def save_exception_waterway(
         ).to_parquet(save_path)
 
 
-def run_for_basin_list(input_list):
+def _run_for_basin_list(input_list):
     """
     Runs the mergining process for a list of basins (and the necessary inputs)
     """
@@ -72,20 +72,20 @@ def run_for_basin_list(input_list):
             x, y = inputs['basin_geometry'].centroid.coords[0]
             print('Index Error, likely no waterway or elevation data at this basin.')
             print(f'Stream ID: {inputs["stream_id"]}, Centroid: {x}, {y}')
-            save_exception_waterway(**inputs)
+            _save_exception_waterway(**inputs)
         except:
             x, y = inputs['basin_geometry'].centroid.coords[0]
             print('Unexplained Error, investigate further.')
             print(f'Stream ID: {inputs["stream_id"]}, Centroid: {x}, {y}')
-        #     save_exception_waterway(**inputs)
+        #     _save_exception_waterway(**inputs)
     time.sleep(.1)
-    temp_df = merge_dfs(input_list)
+    temp_df = _merge_dfs(input_list)
     if temp_df is not None:
         temp_path = ppaths.merged_temp/f'temp_{os.getpid()}.parquet'
         temp_df.to_parquet(temp_path)
 
 
-def open_hydro2_id_tdx_data(hydro2_id, polygon=None):
+def _open_hydro2_id_tdx_data(hydro2_id, polygon=None):
     """
     Parameters
     ----------
@@ -128,7 +128,7 @@ def open_hydro2_id_tdx_data(hydro2_id, polygon=None):
     return all_streams
 
 
-def make_basin_list_input_data(
+def _make_basin_list_input_data(
         basin_stream_gdf, input_list: list, overwrite: bool = False, hydro2_id: int = 0
 ) -> list[dict]:
     """
@@ -209,8 +209,8 @@ def make_all_intersecting_polygon(
     s = tt()
     for hydro2_id in hydro_level2.HYBAS_ID:
         s = tt()
-        all_streams = open_hydro2_id_tdx_data(hydro2_id, polygon)
-        input_list = make_basin_list_input_data(
+        all_streams = _open_hydro2_id_tdx_data(hydro2_id, polygon)
+        input_list = _make_basin_list_input_data(
             all_streams, overwrite=overwrite, input_list=input_list, hydro2_id=hydro2_id
         )
         time_elapsed(s, 2)
@@ -219,7 +219,7 @@ def make_all_intersecting_polygon(
     time_elapsed(s, 2)
     print(f"Making vectorized waterways, number of inputs {len(input_list)}")
     SharedMemoryPool(
-        num_proc=num_proc, func=run_for_basin_list, input_list=input_chunks,
+        num_proc=num_proc, func=_run_for_basin_list, input_list=input_chunks,
         use_kwargs=False, sleep_time=0, terminate_on_error=False, print_progress=True
     ).run()
     print('Merging dataframes')
@@ -251,9 +251,9 @@ def make_all_intersecting_hydrobasin_level_2_polygon(hydrobasin_id: int, save_pa
     """
     s = tt()
     delete_directory_contents(ppaths.merged_temp) if ppaths.merged_temp.exists() else ppaths.merged_temp.mkdir()
-    all_streams = open_hydro2_id_tdx_data(hydrobasin_id)
+    all_streams = _open_hydro2_id_tdx_data(hydrobasin_id)
     inputs_list = []
-    inputs_list = make_basin_list_input_data(
+    inputs_list = _make_basin_list_input_data(
         all_streams, overwrite=overwrite, input_list=inputs_list, hydro2_id=hydrobasin_id
     )
     time_elapsed(s, 2)
@@ -262,7 +262,7 @@ def make_all_intersecting_hydrobasin_level_2_polygon(hydrobasin_id: int, save_pa
     time_elapsed(s, 2)
     print(f"Making vectorized waterways, number of inputs {len(inputs_list)}")
     SharedMemoryPool(
-        num_proc=num_proc, func=run_for_basin_list, input_list=input_chunks,
+        num_proc=num_proc, func=_run_for_basin_list, input_list=input_chunks,
         use_kwargs=False, sleep_time=0, terminate_on_error=False, print_progress=True
     ).run()
     print('Merging dataframes')
