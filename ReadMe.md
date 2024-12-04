@@ -2,9 +2,9 @@
 
 # Overview
 
-This repository is associated with the forthcoming paper "Pierson, Matthew., and Mehrabi, Zia. 2024. Mapping waterways worldwide with deep learning. arXiv" Please cite this paper and attribute the work if using the model or work.
+This repository is associated with the forthcoming paper "Pierson, Matthew., and Mehrabi, Zia. 2024. Mapping waterways worldwide with deep learning. arXiv.  	
+https://doi.org/10.48550/arXiv.2412.00050". Please do cite this paper and attribute the work if using the model or work. The data outputs of this model (raster and vectorized versions) are also stored and available from the following source: Pierson, Matthew., Mehrabi. Zia. 2024, WaterNet Outputs and Code, https://doi.org/10.7910/DVN/YY2XMG, Harvard Dataverse.
 
-The data outputs of this model (raster and vectorized versions) are stored and available under CC-BY-SA 4.0 from the following source: Pierson, Matthew., Mehrabi. Zia. 2024, WaterNet Outputs and Code, https://doi.org/10.7910/DVN/YY2XMG, Harvard Dataverse.
 
 This repository is used to vectorize WaterNet outputs.
 
@@ -131,3 +131,30 @@ def make_all_intersecting_hydrobasin_level_2_polygon(hydrobasin_id: int, save_pa
 
  * [WaterNet](https://github.com/Better-Planet-Laboratory/WaterNet)
  * [WaterNet Training and Evaluation](https://github.com/Better-Planet-Laboratory/WaterNet_training_and_evaluation)
+
+
+# Citations
+
+```yaml
+@misc{pierson2024mappingwaterwaysworldwidedeep,
+      title={Mapping waterways worldwide with deep learning}, 
+      author={Matthew Pierson and Zia Mehrabi},
+      year={2024},
+      eprint={2412.00050},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2412.00050}, 
+}
+```
+
+```yaml
+@data{DVN/YY2XMG_2024,
+author = {Pierson, Matthew and Mehrabi, Zia},
+publisher = {Harvard Dataverse},
+title = {{WaterNet Outputs and Code}},
+year = {2024},
+version = {V1},
+doi = {10.7910/DVN/YY2XMG},
+url = {https://doi.org/10.7910/DVN/YY2XMG}
+}
+```
