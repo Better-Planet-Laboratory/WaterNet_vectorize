@@ -2,9 +2,7 @@
 
 # Overview
 
-This repository is associated with the forthcoming paper "Pierson, Matthew., and Mehrabi, Zia. 2024. Deep learning waterways for rural infrastructure development. arXiv." Please cite this paper and attribute the work if using the model or work.
-
-The data outputs of this model (raster and vectorized versions) are stored and available under CC-BY-SA 4.0 from the following source: Pierson, Matthew., Mehrabi. Zia. 2024, WaterNet Outputs and Code, https://doi.org/10.7910/DVN/YY2XMG, Harvard Dataverse.
+This repository is associated with the forthcoming paper "Pierson, Matthew; Fankhauser, Katie; and Mehrabi, Zia. 2026. Mapping waterways worldwide with deep learning. arXiv. https://doi.org/10.48550/arXiv.2412.00050". Please do cite this paper and attribute the work if using the model or work. The data outputs of this model (raster and vectorized versions) are stored and available under CC-BY-SA 4.0 from the following source: Pierson, Matthew; Fankhauser, Katie; and Mehrabi, Zia. 2026. WaterNet Global Waterways, https://source.coop/fika/waternet, Source Cooperative.
 
 This repository is used to vectorize WaterNet outputs.
 
@@ -131,3 +129,28 @@ def make_all_intersecting_hydrobasin_level_2_polygon(hydrobasin_id: int, save_pa
 
  * [WaterNet](https://github.com/Better-Planet-Laboratory/WaterNet)
  * [WaterNet Training and Evaluation](https://github.com/Better-Planet-Laboratory/WaterNet_training_and_evaluation)
+
+# Citations
+
+```yaml
+@misc{pierson2024mappingwaterwaysworldwidedeep,
+      title={Mapping waterways worldwide with deep learning}, 
+      author={Matthew Pierson, Katie Fankhauser, and Zia Mehrabi},
+      year={2026},
+      eprint={2412.00050},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2412.00050}, 
+}
+```
+
+```yaml
+@data{DVN/YY2XMG_2024,
+author = {Pierson, Matthew, Fankhauser, Katie, and Mehrabi, Zia},
+publisher = {Source Cooperative},
+title = {{WaterNet Global Waterways}},
+year = {2026},
+version = {V2},
+url = {https://source.coop/fika/waternet}
+}
+```
