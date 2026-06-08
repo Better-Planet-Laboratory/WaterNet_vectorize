@@ -4,7 +4,7 @@ from collections import defaultdict
 import numpy as np
 import sys
 
-# noinspection PyShadowingBuiltins
+
 class StreamOrderFixer:
     """
     :class: StreamOrderFixer
@@ -302,6 +302,6 @@ def fix_merged_dfs(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     df['source_stream_ids'] = df['basin_source_ids']
     df['stream_order'] = df['fixed_stream_order']
     return df[[
-        'stream_id', 'target_stream_id', 'source_stream_ids', 'stream_order', 'from_tdx', 'tdx_stream_id', 'geometry'
+        'stream_id', 'target_stream_id', 'source_stream_ids', 'stream_order', 'from_tdx', 'tdx_stream_id', 'length_m', 'geometry'
     ]]
 

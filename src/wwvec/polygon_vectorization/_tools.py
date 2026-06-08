@@ -8,6 +8,40 @@ from shutil import rmtree
 import warnings
 
 
+def printdf(df,
+            head: int = 5,
+            start_index: int=0,
+            head_tail: str='head',
+            include_geometry: bool=False
+            ) -> None:
+    """
+    prints the head of a DataFrame
+
+    Parameters
+    ----------
+    df - pd.DataFrame, data frame (or series) to print
+    head - int, number of rows to print
+
+    Returns
+    -------
+    None
+    """
+    df = df.copy()
+    if hasattr(df, 'columns'):
+        if 'geometry' in df.columns and not include_geometry:
+            df = df[[col for col in df.columns if col != 'geometry']]
+    try:
+        if head_tail == 'head':
+            print(df.iloc[start_index:].head(head).to_string())
+        else:
+            print(df.iloc[start_index:].tail(head).to_string())
+    except AttributeError:
+        if head_tail == 'head':
+            print(df.iloc[start_index:].head(head).to_string())
+        else:
+            print(df.iloc[start_index:].tail(head).to_string())
+
+
 def delete_directory_contents(directory_path: Path):
     """
     Deletes all content in entered directory.
@@ -123,12 +157,13 @@ class SharedMemoryPool:
     def fix_memory_usage(self):
         while psutil.virtual_memory().percent > self.terminate_memory_usage_percent:
             pid_to_terminate = list(self.process_dict.keys())[-1]
-            newest_start_time = np.inf
-            for pid, process_dict in self.process_dict.items():
-                if process_dict['init_start_time'] < newest_start_time:
+            newest_start_time = 0
+            for i, (pid, process_dict) in enumerate(self.process_dict.items()):
+                if process_dict['init_start_time'] > newest_start_time:
                     pid_to_terminate = pid
                     newest_start_time = process_dict['init_start_time']
             self.terminate_and_restart(pid_to_terminate)
+            sleep(.01)
 
     def check_for_completed_processes_and_timeouts(self):
         self.num_new_completed = 0
