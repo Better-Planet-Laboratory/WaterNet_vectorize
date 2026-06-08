@@ -1,8 +1,7 @@
 import shapely
-from wwvec.basin_vectorization.make_basin import run_for_basin
-from wwvec.polygon_vectorization.clean_merged_data import fix_merged_dfs
+from wwvec.width_calculation.basin_polygonizer import basin_polygonizer
 from wwvec.polygon_vectorization._tools import tt, time_elapsed, delete_directory_contents, SharedMemoryPool
-from wwvec.paths import BasinPaths, ppaths
+from wwvec.paths import PolygonizedPaths, ppaths
 import numpy as np
 import geopandas as gpd
 import pandas as pd
@@ -10,11 +9,9 @@ import warnings
 import os
 import time
 from pathlib import Path
+import gc
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
-from pyproj import Geod
-
-
 
 def _merge_dfs(input_list: list) -> gpd.GeoDataFrame:
     """
@@ -28,121 +25,63 @@ def _merge_dfs(input_list: list) -> gpd.GeoDataFrame:
     merged_df : DataFrame
         A merged DataFrame containing the data from the specified paths.
     """
-    paths = [BasinPaths(hydro2_id=val['hydro2_id'], stream_id=val['stream_id']).save_path for val in input_list]
+    paths = [val['paths'] for val in input_list]
     dfs_to_merge = []
     for path in paths:
-        if path.exists():
+        if path.save_path.exists():
             try:
-                dfs_to_merge.append(gpd.read_parquet(path))
+                gdf = gpd.read_parquet(path.save_path)
+                gdf['tdx_stream_id'] = path.stream_id
+                gdf = gdf[gdf.threshold==0.2].reset_index(drop=True)
+                dfs_to_merge.append(gdf)
             except Exception as e:
                 print(e)
                 print(f'Issue with {path}')
                 continue
-    geod = Geod(ellps='WGS84')
-    length_func = np.frompyfunc(lambda geometry: geod.geometry_length(geometry), 1, 1)
+
     if len(paths) > 0:
         merged_df = pd.concat(dfs_to_merge, ignore_index=True)
-        merged_df['length_m'] = length_func(merged_df['geometry'].to_numpy())
         return merged_df
-
-
-def _save_exception_waterway(
-        stream_id: int, hydro2_id: int, old_stream_order: int, old_target_id: int,
-        old_source_ids: list[int], stream_geometry: shapely.LineString, overwrite: bool, **kwargs
-):
-    """Saves waterway in case of an exception in run_for_basin"""
-    save_path = BasinPaths(stream_id=stream_id, hydro2_id=hydro2_id).save_path
-    if not save_path.exists() or overwrite:
-        gpd.GeoDataFrame(
-            [{
-                'stream_id': stream_id, 'from_tdx': True,
-                'source_stream_ids': np.array([], dtype=np.int32), 'target_stream_id': -1,
-                'stream_order': old_stream_order, 'tdx_stream_id': stream_id,
-                'tdx_target_id': old_target_id, 'geometry': stream_geometry,
-                'tdx_source_ids': np.array(old_source_ids, dtype=np.int32),
-            }], crs=4326
-        ).to_parquet(save_path)
-
 
 def _run_for_basin_list(input_list):
     """
     Runs the mergining process for a list of basins (and the necessary inputs)
     """
     for inputs in input_list:
-        # run_for_basin(**inputs)
+        # width_calculation(**inputs)
         try:
-            run_for_basin(**inputs)
-        except IndexError:
+            basin_polygonizer(**inputs)
+        except:
             x, y = inputs['basin_geometry'].centroid.coords[0]
-            print('Index Error, likely no waterway or elevation data at this basin.')
+            print('Unexplained Error, investigate further.')
             print(f'Stream ID: {inputs["stream_id"]}, Centroid: {x}, {y}')
-            _save_exception_waterway(**inputs)
-        # except Exception as E:
-        #     x, y = inputs['basin_geometry'].centroid.coords[0]
-        #     print('Unexplained Error, investigate further.')
-        #     print(E)
-        #     print(f'Stream ID: {inputs["stream_id"]}, Centroid: {x}, {y}')
         #     _save_exception_waterway(**inputs)
     time.sleep(.1)
     temp_df = _merge_dfs(input_list)
     if temp_df is not None:
-        temp_id = temp_df.tdx_stream_id.max()
-        temp_path = ppaths.merged_temp/f'temp_{temp_id}.parquet'
+        temp_path = ppaths.merged_temp/f'temp_{os.getpid()}.parquet'
         temp_df.to_parquet(temp_path)
 
 
-def _open_hydro2_id_tdx_data(hydro2_id: int, polygon=None):
-    """
-    Parameters
-    ----------
-    hydro2_id : str
-        The Hydrobasins level 2 ID of the data to be opened.
-
-    polygon : optional
-        The polygon mask to be applied to the data. If left as None, all of the data will be used.
-
-    Returns
-    -------
-    all_streams : GeoDataFrame
-        The streams data extracted from the TDX stream network file for the given Hydro2 ID and within the specified polygon mask.
-        The data includes the following fields: LINKNO, strmOrder, DSLINKNO, USLINKNO1, USLINKNO2, and geometry.
-
-    Notes
-    -----
-    - The function reads the TDX stream network file and the TDX basin file for the given Hydro2 ID and applies the polygon mask if provided.
-    - The function joins the streams data with the basins data based on the LINKNO field.
-    - The resulting GeoDataFrame contains the joined data with an added 'basin' field representing the basin geometry.
-
-    """
-    print('Opening Streams')
-    all_streams = gpd.read_file(
-        ppaths.get_tdx_stream_network_file(hydro2_id), mask=polygon,
-        include_fields=['LINKNO', 'strmOrder', 'DSLINKNO', 'USLINKNO1', 'USLINKNO2', 'geometry']
-    )
-    all_streams = all_streams[all_streams.length > 0]
-    all_streams = all_streams.reset_index(drop=True)
+def _open_hydro2_id_tdx_data(hydro2_id, polygon=None):
     print('Opening Basins')
     all_basins = gpd.read_file(
         ppaths.get_tdx_basin_file(hydro2_id), mask=polygon, include_fields=['streamID', 'geometry']
     ).reset_index(drop=True)
     all_basins['area'] = all_basins.area
+    # all_basins['geometry'] = all_basins.buffer(0.001)
     all_basins = all_basins.sort_values(by='area', ascending=False).drop_duplicates('streamID', keep='first')
     all_basins = all_basins.set_index('streamID')
-    all_basins['basin'] = all_basins.geometry
-    all_streams = all_streams.set_index('LINKNO')
-    all_streams = all_streams.join(all_basins[['basin']], how='inner')
-    return all_streams
+    return all_basins
 
 
 def _make_basin_list_input_data(
-        basin_stream_gdf, input_list: list, overwrite: bool = False, hydro2_id: int = 0
+        basin_gdf, input_list: list, overwrite: bool = False, hydro2_id: int = 0, thresholds: list[float] = None
 ) -> list[dict]:
     """
     Parameters
     ----------
-    basin_stream_gdf : GeoDataFrame
-        GeoDataFrame containing information about basin streams.
-        Required columns: index, strmOrder, DSLINKNO, USLINKNO1, USLINKNO2, basin, geometry.
+    basin_gdf : GeoDataFrame
 
     input_list : list
         List that the input data will be appended to.
@@ -167,18 +106,12 @@ def _make_basin_list_input_data(
     This method iterates over the rows of the basin_stream_gdf GeoDataFrame and generates input data for each stream.
     The input data is then added to the input_list, which is returned at the end.
     """
-    for stream_id, old_stream_order, old_target, old_source1, old_source2, basin_geometry, stream_geometry in zip(
-            basin_stream_gdf.index, basin_stream_gdf.strmOrder, basin_stream_gdf.DSLINKNO, basin_stream_gdf.USLINKNO1,
-            basin_stream_gdf.USLINKNO2,
-            basin_stream_gdf.basin, basin_stream_gdf.geometry
-    ):
-        old_sources = [old_source1, old_source2] if old_source1 != -1 else []
+    for stream_id, basin_geometry in zip(basin_gdf.index, basin_gdf.geometry):
         try:
-            stream_geometry = basin_stream_gdf.loc[stream_id, 'geometry']
             inputs = dict(
-                basin_geometry=basin_geometry, stream_geometry=stream_geometry, old_target_id=old_target,
-                old_source_ids=old_sources, old_stream_order=old_stream_order,
-                hydro2_id=hydro2_id, stream_id=stream_id, overwrite=overwrite
+                basin_geometry=basin_geometry, thresholds=thresholds,
+                paths=PolygonizedPaths(hydro2_id, stream_id), overwrite=overwrite,
+                stream_id=stream_id
             )
             input_list.append(inputs)
         except:
@@ -222,7 +155,6 @@ def make_all_intersecting_polygon(
         time_elapsed(s, 2)
     np.random.shuffle(input_list)
     input_chunks = np.array_split(input_list, max(len(input_list)//500, 4*num_proc))
-    print(f'  Number of input chunks: {len(input_chunks)}')
     time_elapsed(s, 2)
     print(f"Making vectorized waterways, number of inputs {len(input_list)}")
     SharedMemoryPool(
@@ -231,9 +163,8 @@ def make_all_intersecting_polygon(
     ).run()
     print('Merging dataframes')
     merged_df = pd.concat([gpd.read_parquet(file) for file in ppaths.merged_temp.iterdir()], ignore_index=True)
-    fixed_df = fix_merged_dfs(merged_df)
-    fixed_df.to_parquet(save_path)
-    return fixed_df
+    merged_df.to_parquet(save_path)
+    return merged_df
 
 
 def make_all_intersecting_hydrobasin_level_2_polygon(hydrobasin_id: int, save_path: Path, overwrite=False, num_proc=30):
@@ -267,18 +198,24 @@ def make_all_intersecting_hydrobasin_level_2_polygon(hydrobasin_id: int, save_pa
     np.random.shuffle(inputs_list)
     input_chunks = np.array_split(inputs_list, max(len(inputs_list)//500, min(4*num_proc, len(inputs_list))))
     time_elapsed(s, 2)
-    print(f"Making vectorized waterways, number of inputs {len(inputs_list)}, number of chunks {len(input_chunks)}")
+    print(f"Making vectorized waterways, number of inputs {len(inputs_list)}")
     SharedMemoryPool(
         num_proc=num_proc, func=_run_for_basin_list, input_list=input_chunks,
         use_kwargs=False, sleep_time=0, terminate_on_error=False, print_progress=True
     ).run()
     print('Merging dataframes')
+    del(all_streams, inputs_list, input_chunks)
+    gc.collect()
     s = tt()
     merged_df = pd.concat([gpd.read_parquet(file) for file in ppaths.merged_temp.iterdir()], ignore_index=True)
+    # temp_files = list(ppaths.merged_temp.iterdir())
+    # merged_df = pd.concat([gpd.read_parquet(file) for file in temp_files[:200]], ignore_index=True)
+    # for i in range(200, len(temp_files), 200):
+    #     print(i, i + 200, len(temp_files))
+    #     merged_df = pd.concat(
+    #         [merged_df] + [gpd.read_parquet(file) for file in temp_files[i: min(i + 200, len(temp_files))]],
+    #         ignore_index=True
+    #     )
     time_elapsed(s, 2)
-    print('Fixing dataframes')
-    s = tt()
-    fixed_df = fix_merged_dfs(merged_df)
-    time_elapsed(s, 2)
-    fixed_df.to_parquet(save_path)
+    merged_df.to_parquet(save_path)
     return merged_df

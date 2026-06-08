@@ -118,9 +118,14 @@ class BasinData:
 
         """
         bbox = self.grid_bbox
-        basin_probability = make_bbox_raster(bbox, base_dir=self.paths.waterway_grids)
-        basin_probability = basin_probability.astype(np.float32)/255
-        basin_elevation = make_bbox_raster(bbox, base_dir=self.paths.elevation_grids)
+        try:
+            basin_probability = make_bbox_raster(bbox, base_dir=self.paths.waterway_grids, min_pixels=5)
+            basin_probability = basin_probability.astype(np.float32)/255
+            basin_elevation = make_bbox_raster(bbox, base_dir=self.paths.elevation_grids)
+        except Exception as e:
+            print(bbox)
+            print(self.basin_geometry.bounds)
+            raise e
         basin_elevation = basin_elevation.rio.reproject_match(basin_probability)
         shape = basin_probability[0].shape
         transform = basin_probability.rio.transform()

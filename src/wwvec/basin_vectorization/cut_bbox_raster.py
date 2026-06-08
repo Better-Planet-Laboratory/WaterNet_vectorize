@@ -100,7 +100,7 @@ def get_file_paths_intersecting_bbox(
 
 
 def cut_and_merge_files(
-        file_paths: list[Path], bbox: list or tuple
+        file_paths: list[Path], bbox: list or tuple, min_pixels: int = 0
 ) -> xr.DataArray:
     """
     Cuts the raster files in file_paths to the entered bounding box, then merges that data
@@ -131,14 +131,19 @@ def cut_and_merge_files(
         # Need to investigate further. When reprojecting some arrays with a small overlap (1 grid cell),
         # rioxarray/ rasterio removes that cell, making the array have 0 in its shape. so we will force num_rows>1
         # and num_cols>1.
-        if num_rows > 1 and num_cols > 1:
+        if num_rows > min_pixels and num_cols > min_pixels:
             subarray = subarray.where(subarray < 1e30, other=array.rio.nodata)
             arrays.append(subarray)
-    return merge_arrays(arrays, bounds=(w, s, e, n))
+    try:
+        return merge_arrays(arrays, bounds=(w, s, e, n))
+    except Exception as e:
+        for array in arrays:
+            print(array.shape)
+        raise e
 
 
 def make_bbox_raster(
-        bbox: list or tuple, base_dir: Path
+        bbox: list or tuple, base_dir: Path, min_pixels: int = 0
 ) -> xr.DataArray:
     """
     Finds files in base_dir that intersects bbox (using get_file_paths_intersecting_bbox), then cuts and merges that
@@ -158,5 +163,5 @@ def make_bbox_raster(
         The raster image obtained by cutting and merging the raster files that intersect with the given bounding box.
     """
     file_paths = get_file_paths_intersecting_bbox(bbox, base_dir=base_dir)
-    raster = cut_and_merge_files(file_paths, bbox)
+    raster = cut_and_merge_files(file_paths, bbox, min_pixels=min_pixels)
     return raster

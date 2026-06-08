@@ -63,6 +63,8 @@ class ProjPaths:
         self.tdx_streams = self.add_directory('tdx_streams', self.data)
         self.tdx_basins = self.add_directory('tdx_basins', self.data)
         self.merged_temp = self.add_directory('merged_temp', self.data)
+
+
         self.hydrobasins = self.add_file(
             'hydrobasins_level2', 'geojson', self.data, 'hydrobasins'
         )
@@ -112,6 +114,25 @@ class BasinPaths:
         self.hydro = self.vectorized/f'hydro2_{hydro2_id}'
         self.hydro.mkdir(exist_ok=True)
         self.save_path = self.hydro / f'stream_id_{stream_id}.parquet'
+
+    @staticmethod
+    def add_directory(directory_name):
+        if hasattr(ppaths, directory_name):
+            return getattr(ppaths, directory_name)
+        else:
+            return ppaths.add_directory(directory_name, ppaths.data)
+
+class PolygonizedPaths:
+    """Paths for an individual basin"""
+    def __init__(self, hydro2_id: int, stream_id: int):
+        self.waterway_grids = self.add_directory('waterway_grids')
+        self.tdx_basins = self.add_directory('tdx_basins')
+        self.polygonized = self.add_directory('polygonized')
+        self.hydro = self.polygonized/f'hydro2_{hydro2_id}'
+        self.hydro.mkdir(exist_ok=True)
+        self.save_path = self.hydro / f'stream_id_{stream_id}.parquet'
+        self.hydro_id = hydro2_id
+        self.stream_id = stream_id
 
     @staticmethod
     def add_directory(directory_name):
