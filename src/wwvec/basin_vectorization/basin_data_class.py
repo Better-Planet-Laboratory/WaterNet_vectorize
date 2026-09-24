@@ -4,8 +4,15 @@ import numpy as np
 from rasterio import features
 from wwvec.paths import BasinPaths
 from wwvec.basin_vectorization.cut_bbox_raster import make_bbox_raster
-from wwvec.basin_vectorization.thin_grid import thinner
-from wwvec.basin_vectorization.components import find_raster_components
+try:
+    from wwvec.basin_vectorization.thin_grid import thinner
+except ImportError:
+    from wwvec.basin_vectorization.fast_thinning import zhang_suen_thinning as thinner
+
+try:
+    from wwvec.basin_vectorization.components import find_raster_components
+except ImportError:
+    find_raster_components = None
 import xarray as xr
 
 

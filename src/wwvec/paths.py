@@ -50,15 +50,16 @@ class ProjPaths:
                  ) -> None:
         self.base_path = base
         self.configuration_files = self.base_path/'configuration_files'
-        self._path_config = {}
-        if (self.configuration_files/'path_configuration.yaml').exists():
-            self._path_config = open_yaml(self.configuration_files/'path_configuration.yaml')
-            if self._path_config is None:
-                self._path_config = {}
-            if self._path_config.setdefault('directories', {}) is None:
-                self._path_config['directories'] = {}
-            if self._path_config.setdefault('files', {}) is None:
-                self._path_config['files'] = {}
+        self._path_config = {"directories": {}, "files": {}, "file_names": {}}
+        cfg_file = self.configuration_files / "path_configuration.yaml"
+        if cfg_file.exists():
+            cfg = open_yaml(cfg_file)
+            if cfg:
+                self._path_config.update(cfg)
+            if self._path_config.get("directories") is None:
+                self._path_config["directories"] = {}
+            if self._path_config.get("files") is None:
+                self._path_config["files"] = {}
         self.data = self.add_directory('data', self.base_path)
         self.tdx_streams = self.add_directory('tdx_streams', self.data)
         self.tdx_basins = self.add_directory('tdx_basins', self.data)
